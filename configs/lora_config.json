@@ -1,5 +1,5 @@
 {
-    "base_model_name": "mistralai/Mistral-7B-v0.1",
+    "base_model_name": "codellama/CodeLlama-7b-Instruct-hf",
     "lora_config": {
         "r": 8,
         "lora_alpha": 16,
