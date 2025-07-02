@@ -12,6 +12,7 @@ from transformers import (
     AutoTokenizer,
     PreTrainedModel,
     PreTrainedTokenizer,
+    BitsAndBytesConfig,
 )
 from peft import (
     LoraConfig,
@@ -66,14 +67,22 @@ class ModelLoader:
         }
         
         # Add quantization config if specified
-        if self.config.get("load_in_8bit", False):
+        if self.config.get("load_in_4bit", False):
+            # Create BitsAndBytesConfig for QLoRA
+            bnb_config_dict = self.config.get("bnb_config", {})
+            bnb_config = BitsAndBytesConfig(
+                load_in_4bit=bnb_config_dict.get("load_in_4bit", True),
+                bnb_4bit_use_double_quant=bnb_config_dict.get("bnb_4bit_use_double_quant", True),
+                bnb_4bit_quant_type=bnb_config_dict.get("bnb_4bit_quant_type", "nf4"),
+                bnb_4bit_compute_dtype=getattr(torch, bnb_config_dict.get("bnb_4bit_compute_dtype", "bfloat16"))
+            )
+            model_kwargs.update({
+                "quantization_config": bnb_config,
+                "torch_dtype": getattr(torch, self.config.get("torch_dtype", "bfloat16")),
+            })
+        elif self.config.get("load_in_8bit", False):
             model_kwargs.update({
                 "load_in_8bit": True,
-                "torch_dtype": torch.float16,
-            })
-        elif self.config.get("load_in_4bit", False):
-            model_kwargs.update({
-                "load_in_4bit": True,
                 "torch_dtype": torch.float16,
             })
         elif torch_dtype := self.config.get("torch_dtype"):
@@ -87,7 +96,10 @@ class ModelLoader:
         
         # Prepare for training if using quantization
         if self.config.get("load_in_8bit") or self.config.get("load_in_4bit"):
-            model = prepare_model_for_kbit_training(model)
+            model = prepare_model_for_kbit_training(
+                model, 
+                use_gradient_checkpointing=True
+            )
             
         return model, tokenizer
         
