@@ -101,10 +101,10 @@ class TextGenerator:
         return model, tokenizer
         
     def format_prompt(self, instruction: str, input_text: str = "") -> str:
-        """Format the instruction and input into a prompt."""
-        if input_text:
-            return f"### Instruction:\n{instruction}\n\n### Input:\n{input_text}\n\n### Response:\n"
-        return f"### Instruction:\n{instruction}\n\n### Response:\n"
+        """Format the instruction and input into a prompt suitable for CodeLlama."""
+        if input_text and input_text.strip():
+            return f"[INST] {instruction}\n\nInput:\n{input_text} [/INST]"
+        return f"[INST] {instruction} [/INST]"
         
     @torch.inference_mode()
     def generate(
@@ -201,7 +201,7 @@ def main():
     parser.add_argument(
         "--base_model",
         type=str,
-        default="mistralai/Mistral-7B-v0.1",
+        default="codellama/CodeLlama-7b-Instruct-hf",
         help="Base model name or path"
     )
     parser.add_argument(
