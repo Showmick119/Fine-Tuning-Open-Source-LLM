@@ -1,15 +1,15 @@
-# LLM Fine-tuning with LoRA
+# 🚀 CodeLlama Fine-tuning with QLoRA
 
-This repository provides a clean, modular implementation for fine-tuning large language models (LLMs) using Low-Rank Adaptation (LoRA) via the PEFT library. The project is designed to work with HuggingFace-compatible models and is optimized for Google Colab environments.
+This repository provides a clean, modular implementation for fine-tuning **CodeLlama-7b-Instruct** using **QLoRA (4-bit quantization)** via the PEFT library on the **CodeAlpaca-20k** dataset. The project is optimized for Google Colab environments and includes comprehensive evaluation on HumanEval.
 
 ## Features
 
-- 🚀 Fine-tune LLMs using LoRA (Low-Rank Adaptation)
-- 📦 Support for various HuggingFace models (default: Mistral-7B)
-- 💾 8-bit quantization support for efficient training
-- 📊 Comprehensive logging and checkpointing
+- 🤖 Fine-tune **CodeLlama-7b-Instruct** using QLoRA (4-bit quantization)
+- 📊 Train on **CodeAlpaca-20k** dataset (20,000 high-quality code examples)
+- ⚡ **QLoRA** support for efficient training on single GPU
+- 📈 **HumanEval** evaluation for benchmarking code generation
 - 🔄 Easy-to-use training and inference pipelines
-- 📓 Jupyter notebooks for interactive usage
+- 📓 Colab-ready Jupyter notebooks with rich documentation
 - 🎯 Clean, typed, and modular Python code
 
 ## Project Structure
@@ -17,25 +17,29 @@ This repository provides a clean, modular implementation for fine-tuning large l
 ```
 llm-finetuning-lora/
 ├── configs/
-│   ├── lora_config.json        # LoRA adapter configuration
+│   ├── lora_config.json        # QLoRA configuration for CodeLlama
 │   └── training_args.json      # Training hyperparameters
 ├── data/
-│   ├── raw/                    # Place your raw data files here
+│   ├── code_alpaca_20k.json    # CodeAlpaca-20k training dataset
 │   └── prepare_dataset.py      # Dataset preparation utilities
 ├── model/
-│   └── load_base_model.py      # Model loading and LoRA configuration
+│   └── load_base_model.py      # Model loading with QLoRA support
 ├── train/
 │   └── run_lora_finetune.py    # Training pipeline
 ├── inference/
-│   └── generate_text.py        # Text generation utilities
+│   └── generate_text.py        # Code generation utilities
+├── evaluate/
+│   └── evaluate_model.py       # HumanEval evaluation module
 ├── notebooks/
-│   ├── 1_finetune_lora.ipynb  # Fine-tuning demonstration
-│   └── 2_test_finetuned.ipynb # Inference demonstration
+│   ├── 1_train_model.ipynb     # 🚀 Fine-tuning demonstration
+│   ├── 2_test_model.ipynb      # 🧪 Interactive testing
+│   └── 3_evaluate_model.ipynb  # 📊 HumanEval evaluation
 ├── outputs/
-│   ├── checkpoints/           # Saved model checkpoints
-│   └── logs/                  # Training logs
-├── requirements.txt           # Project dependencies
-└── README.md                 # This file
+│   ├── checkpoints/            # Saved LoRA adapters
+│   ├── logs/                   # Training logs
+│   └── evaluation/             # Evaluation results
+├── requirements.txt            # Project dependencies
+└── README.md                  # This file
 ```
 
 ## Installation
@@ -53,71 +57,84 @@ llm-finetuning-lora/
 
 ## Usage
 
-### 1. Prepare Your Data
+### 1. Dataset: CodeAlpaca-20k
 
-Place your training data in the `data/raw/` directory. The data should be in JSON or JSONL format with the following structure:
+The repository comes with the **CodeAlpaca-20k** dataset (`data/code_alpaca_20k.json`) containing 20,000 high-quality instruction-following examples for code generation. The dataset format:
 
 ```json
 {
-    "instruction": "Your instruction here",
-    "input": "Optional input text",
-    "output": "Expected output text"
+    "instruction": "Write a Python function to...",
+    "input": "Optional input context",
+    "output": "def example_function():\n    # Implementation"
 }
 ```
 
-### 2. Configure the Training
+### 2. QLoRA Configuration
 
-1. Adjust LoRA settings in `configs/lora_config.json`:
-   ```json
-   {
-       "base_model_name": "mistralai/Mistral-7B-v0.1",
-       "lora_config": {
-           "r": 8,
-           "lora_alpha": 16,
-           "target_modules": ["q_proj", "k_proj", "v_proj", "o_proj"],
-           "lora_dropout": 0.05
-       }
-   }
-   ```
+The model is pre-configured for **CodeLlama-7b-Instruct** with QLoRA settings in `configs/lora_config.json`:
 
-2. Modify training parameters in `configs/training_args.json`:
-   ```json
-   {
-       "num_train_epochs": 3,
-       "per_device_train_batch_size": 4,
-       "learning_rate": 2e-4
-   }
-   ```
+```json
+{
+    "base_model_name": "codellama/CodeLlama-7b-Instruct-hf",
+    "load_in_4bit": true,
+    "bnb_config": {
+        "bnb_4bit_quant_type": "nf4",
+        "bnb_4bit_compute_dtype": "bfloat16"
+    },
+    "lora_config": {
+        "r": 16,
+        "lora_alpha": 32,
+        "target_modules": ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
+    }
+}
+```
 
-### 3. Run Fine-tuning
+### 3. Quick Start with Google Colab
 
-#### Option 1: Using Python Script
+#### 🚀 Fine-tuning (Notebook)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/your-username/llm-finetuning-lora/blob/main/notebooks/1_train_model.ipynb)
 
+1. Open `notebooks/1_train_model.ipynb` in Google Colab
+2. Run all cells to fine-tune CodeLlama on CodeAlpaca-20k
+3. Training takes ~1-2 hours on Colab's T4 GPU
+
+#### 🧪 Testing (Notebook)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/your-username/llm-finetuning-lora/blob/main/notebooks/2_test_model.ipynb)
+
+1. Open `notebooks/2_test_model.ipynb` 
+2. Test your fine-tuned model on various coding tasks
+3. Interactive prompt interface for custom testing
+
+#### 📊 Evaluation (Notebook)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/your-username/llm-finetuning-lora/blob/main/notebooks/3_evaluate_model.ipynb)
+
+1. Open `notebooks/3_evaluate_model.ipynb`
+2. Benchmark your model on HumanEval (164 coding problems)
+3. Get Pass@1 scores and detailed analysis
+
+### 4. Command Line Usage
+
+#### Fine-tuning
 ```bash
 python train/run_lora_finetune.py \
     --training_config configs/training_args.json \
-    --lora_config configs/lora_config.json \
-    --data_path data/raw/your_data.json
+    --lora_config configs/lora_config.json
 ```
 
-#### Option 2: Using Jupyter Notebook
-
-Open and run `notebooks/1_finetune_lora.ipynb` in Google Colab or your local Jupyter environment.
-
-### 4. Generate Text with Fine-tuned Model
-
-#### Option 1: Using Python Script
-
+#### Code Generation
 ```bash
 python inference/generate_text.py \
-    --base_model mistralai/Mistral-7B-v0.1 \
+    --base_model codellama/CodeLlama-7b-Instruct-hf \
     --adapter_path outputs/checkpoints \
-    --instruction "Your instruction here"
+    --instruction "Write a Python function to implement binary search"
 ```
 
-#### Option 2: Using Jupyter Notebook
-
-Open and run `notebooks/2_test_finetuned.ipynb` to interactively generate text with your fine-tuned model.
+#### HumanEval Evaluation
+```bash
+python evaluate/evaluate_model.py \
+    --base_model codellama/CodeLlama-7b-Instruct-hf \
+    --adapter_path outputs/checkpoints
+```
 
 ## Advanced Usage
 
@@ -160,6 +177,12 @@ run_training(
 - Datasets 2.15+
 - Accelerate 0.25+
 - bitsandbytes 0.41+
+- lighteval 0.4+ (for HumanEval evaluation)
+
+### Hardware Requirements
+- **Training**: 12GB+ GPU (Colab T4 works well)
+- **Inference**: 6GB+ GPU or CPU
+- **Evaluation**: 8GB+ GPU for HumanEval benchmark
 
 ## Contributing
 

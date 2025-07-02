@@ -148,6 +148,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--data_path",
         type=str,
+        default="data/code_alpaca_20k.json",
         help="Path to training data file"
     )
     parser.add_argument(

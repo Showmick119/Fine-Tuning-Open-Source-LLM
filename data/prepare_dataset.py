@@ -58,15 +58,22 @@ class DatasetPreparator:
         if self.data_path.suffix == '.json':
             with open(self.data_path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
-            return Dataset.from_dict(data)
+            
+            # Handle different data formats
+            if isinstance(data, list):
+                # Data is a list of examples (CodeAlpaca format)
+                return Dataset.from_list(data)
+            else:
+                # Data is a dictionary with column names as keys
+                return Dataset.from_dict(data)
         else:  # Assume JSONL
             return Dataset.from_json(str(self.data_path))
             
     def format_prompt(self, instruction: str, input_text: str = "") -> str:
-        """Format the instruction and input into a prompt."""
-        if input_text:
-            return f"### Instruction:\n{instruction}\n\n### Input:\n{input_text}\n\n### Response:\n"
-        return f"### Instruction:\n{instruction}\n\n### Response:\n"
+        """Format the instruction and input into a prompt suitable for CodeLlama."""
+        if input_text and input_text.strip():
+            return f"[INST] {instruction}\n\nInput:\n{input_text} [/INST]"
+        return f"[INST] {instruction} [/INST]"
     
     def preprocess_function(self, examples: Dict[str, List]) -> Dict[str, List]:
         """
