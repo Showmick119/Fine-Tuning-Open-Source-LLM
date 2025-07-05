@@ -1,90 +1,2070 @@
 [
   {
-    "instruction": "Create a simple FastAPI application with a hello world endpoint",
-    "input": "",
-    "output": "from fastapi import FastAPI\n\napp = FastAPI()\n\n@app.get(\"/\")\nasync def read_root():\n    return {\"message\": \"Hello World\"}\n\n@app.get(\"/items/{item_id}\")\nasync def read_item(item_id: int, q: str = None):\n    return {\"item_id\": item_id, \"q\": q}",
-    "category": "basic",
-    "difficulty": "beginner",
-    "tags": [
-      "fastapi",
-      "basic",
-      "endpoint"
-    ]
-  },
-  {
-    "instruction": "Create a FastAPI endpoint that accepts a user registration with email validation",
-    "input": "",
-    "output": "from fastapi import FastAPI\nfrom pydantic import BaseModel, EmailStr\nfrom typing import Optional\n\napp = FastAPI()\n\nclass UserRegistration(BaseModel):\n    username: str\n    email: EmailStr\n    password: str\n    full_name: Optional[str] = None\n\n@app.post(\"/register\")\nasync def register_user(user: UserRegistration):\n    return {\n        \"message\": \"User registered successfully\",\n        \"username\": user.username,\n        \"email\": user.email\n    }",
-    "category": "models",
+    "instruction": "Create a FastAPI GET endpoint with authentication and with database integration",
+    "input": "Include database operations",
+    "output": "            @api.get(path, status_code=200, response_model=response_model, dependencies=dependencies)\n            def get_one_by_primary_key(response: Response,\n                                       request: Request,\n                                       url_param=Depends(request_url_param_model),\n                                       query=Depends(request_query_model),\n                                       session=Depends(db_session)):\n\n                join = query.__dict__.pop('join_foreign_table', None)\n                stmt = query_service.get_one(filter_args=query.__dict__,\n                                             extra_args=url_param.__dict__,\n                                             join_mode=join)\n                query_result = execute_service.execute(session, stmt)\n                response_result = parsing_service.find_one(response_model=response_model,\n                                                           sql_execute_result=query_result,\n                                                           fastapi_response=response,\n                                                           session=session,\n                                                           join_mode=join)\n                return response_result",
+    "category": "authentication",
     "difficulty": "intermediate",
     "tags": [
       "fastapi",
-      "pydantic",
-      "validation",
-      "registration"
-    ]
+      "get",
+      "authentication",
+      "database"
+    ],
+    "source_repo": "LuisLuii/FastAPIQuickCRUD",
+    "source_file": "src/fastapi_quickcrud/misc/abstract_route.py",
+    "complexity_score": 21
   },
   {
-    "instruction": "Create a FastAPI endpoint to get all users from database using SQLAlchemy",
-    "input": "",
-    "output": "from fastapi import FastAPI, Depends\nfrom sqlalchemy.orm import Session\nfrom database import SessionLocal, User\n\napp = FastAPI()\n\ndef get_db():\n    db = SessionLocal()\n    try:\n        yield db\n    finally:\n        db.close()\n\n@app.get(\"/users\")\nasync def get_users(db: Session = Depends(get_db)):\n    users = db.query(User).all()\n    return users",
-    "category": "database",
+    "instruction": "Create a FastAPI GET endpoint with authentication and with database integration",
+    "input": "Include database operations",
+    "output": "            @api.get(path, dependencies=dependencies, response_model=response_model)\n            def get_many(response: Response,\n                         request: Request,\n                         query=Depends(request_query_model),\n                         session=Depends(\n                             db_session)\n                         ):\n                join = query.__dict__.pop('join_foreign_table', None)\n\n                stmt = query_service.get_many(query=query.__dict__, join_mode=join)\n                query_result = execute_service.execute(session, stmt)\n                parsed_response = parsing_service.find_many(response_model=response_model,\n                                                            sql_execute_result=query_result,\n                                                            fastapi_response=response,\n                                                            join_mode=join,\n                                                            session=session)\n                return parsed_response",
+    "category": "authentication",
     "difficulty": "intermediate",
     "tags": [
       "fastapi",
-      "sqlalchemy",
-      "database",
-      "dependency-injection"
-    ]
+      "get",
+      "authentication",
+      "database"
+    ],
+    "source_repo": "LuisLuii/FastAPIQuickCRUD",
+    "source_file": "src/fastapi_quickcrud/misc/abstract_route.py",
+    "complexity_score": 20
   },
   {
-    "instruction": "Create a FastAPI endpoint with JWT authentication",
-    "input": "",
-    "output": "from fastapi import FastAPI, Depends, HTTPException, status\nfrom fastapi.security import HTTPBearer, HTTPAuthorizationCredentials\nfrom jose import JWTError, jwt\nfrom datetime import datetime, timedelta\n\napp = FastAPI()\nsecurity = HTTPBearer()\n\nSECRET_KEY = \"your-secret-key\"\nALGORITHM = \"HS256\"\n\ndef create_access_token(data: dict):\n    to_encode = data.copy()\n    expire = datetime.utcnow() + timedelta(minutes=15)\n    to_encode.update({\"exp\": expire})\n    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)\n    return encoded_jwt\n\nasync def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):\n    try:\n        payload = jwt.decode(credentials.credentials, SECRET_KEY, algorithms=[ALGORITHM])\n        username: str = payload.get(\"sub\")\n        if username is None:\n            raise HTTPException(status_code=401, detail=\"Invalid token\")\n        return username\n    except JWTError:\n        raise HTTPException(status_code=401, detail=\"Invalid token\")\n\n@app.get(\"/protected\")\nasync def protected_route(current_user: str = Depends(verify_token)):\n    return {\"message\": f\"Hello {current_user}\"}",
+    "instruction": "Create a FastAPI POST endpoint with Pydantic validation and with authentication and with database integration",
+    "input": "Include proper request validation and database operations",
+    "output": "            @api.post(path, status_code=201, response_model=response_model, dependencies=dependencies)\n            def insert_one(\n                    response: Response,\n                    request: Request,\n                    query: request_body_model = Depends(request_body_model),\n                    session=Depends(db_session)\n            ):\n\n                new_inserted_data = query_service.create(insert_arg=query.__dict__)\n\n                execute_service.add_all(session, new_inserted_data)\n\n                try:\n                    execute_service.flush(session)\n                except IntegrityError as e:\n                    err_msg, = e.orig.args\n                    if 'unique constraint' not in err_msg.lower():\n                        raise e\n                    result = Response(status_code=HTTPStatus.CONFLICT)\n                    return result\n                return parsing_service.create_one(response_model=response_model,\n                                                  sql_execute_result=new_inserted_data,\n                                                  fastapi_response=response,\n                                                  session=session)",
     "category": "authentication",
     "difficulty": "advanced",
     "tags": [
       "fastapi",
-      "jwt",
+      "post",
+      "pydantic",
       "authentication",
-      "security"
-    ]
+      "database"
+    ],
+    "source_repo": "LuisLuii/FastAPIQuickCRUD",
+    "source_file": "src/fastapi_quickcrud/misc/abstract_route.py",
+    "complexity_score": 32
   },
   {
-    "instruction": "Create a FastAPI endpoint to upload and process files",
-    "input": "",
-    "output": "from fastapi import FastAPI, UploadFile, File, HTTPException\nfrom typing import List\nimport shutil\nfrom pathlib import Path\n\napp = FastAPI()\n\n@app.post(\"/upload\")\nasync def upload_file(file: UploadFile = File(...)):\n    if not file.filename.endswith(('.jpg', '.jpeg', '.png', '.pdf')):\n        raise HTTPException(status_code=400, detail=\"Invalid file type\")\n    \n    file_path = Path(f\"uploads/{file.filename}\")\n    file_path.parent.mkdir(exist_ok=True)\n    \n    with open(file_path, \"wb\") as buffer:\n        shutil.copyfileobj(file.file, buffer)\n    \n    return {\n        \"filename\": file.filename,\n        \"size\": file_path.stat().st_size,\n        \"content_type\": file.content_type\n    }\n\n@app.post(\"/upload-multiple\")\nasync def upload_multiple_files(files: List[UploadFile] = File(...)):\n    uploaded_files = []\n    \n    for file in files:\n        file_path = Path(f\"uploads/{file.filename}\")\n        file_path.parent.mkdir(exist_ok=True)\n        \n        with open(file_path, \"wb\") as buffer:\n            shutil.copyfileobj(file.file, buffer)\n        \n        uploaded_files.append({\n            \"filename\": file.filename,\n            \"size\": file_path.stat().st_size\n        })\n    \n    return {\"uploaded_files\": uploaded_files}",
-    "category": "file-handling",
+    "instruction": "Create a FastAPI POST endpoint with Pydantic validation and with authentication and with database integration",
+    "input": "Include proper request validation and database operations",
+    "output": "            @api.post(path, status_code=201, response_model=response_model, dependencies=dependencies)\n            def insert_many(\n                    response: Response,\n                    request: Request,\n                    query: request_body_model = Depends(request_body_model),\n                    session=Depends(db_session)\n            ):\n\n                # inserted_data = query.__dict__['insert']\n                update_list = query.__dict__\n                inserted_data = query_service.create(insert_arg=update_list,\n                                                     create_one=False)\n\n                execute_service.add_all(session, inserted_data)\n\n                try:\n                    execute_service.flush(session)\n                except IntegrityError as e:\n                    err_msg, = e.orig.args\n                    if 'unique constraint' not in err_msg.lower():\n                        raise e\n                    result = Response(status_code=HTTPStatus.CONFLICT)\n                    return result\n                return parsing_service.create_many(response_model=response_model,\n                                                   sql_execute_result=inserted_data,\n                                                   fastapi_response=response,\n                                                   session=session)",
+    "category": "authentication",
+    "difficulty": "advanced",
+    "tags": [
+      "fastapi",
+      "post",
+      "pydantic",
+      "authentication",
+      "database"
+    ],
+    "source_repo": "LuisLuii/FastAPIQuickCRUD",
+    "source_file": "src/fastapi_quickcrud/misc/abstract_route.py",
+    "complexity_score": 35
+  },
+  {
+    "instruction": "Create a FastAPI DELETE endpoint with authentication and with database integration",
+    "input": "Include database operations",
+    "output": "            @api.delete(path, status_code=200, response_model=response_model, dependencies=dependencies)\n            def delete_one_by_primary_key(response: Response,\n                                          request: Request,\n                                          query=Depends(request_query_model),\n                                          request_url_param_model=Depends(request_url_model),\n                                          session=Depends(db_session)):\n                filter_stmt = query_service.model_query(filter_args=request_url_param_model.__dict__,\n                                                        extra_args=query.__dict__,\n                                                        session=session)\n                delete_instance = session.execute(filter_stmt).scalar()\n\n                return parsing_service.delete_one(response_model=response_model,\n                                                  sql_execute_result=delete_instance,\n                                                  fastapi_response=response,\n                                                  session=session)",
+    "category": "authentication",
     "difficulty": "intermediate",
     "tags": [
       "fastapi",
-      "file-upload",
-      "multipart"
-    ]
+      "delete",
+      "authentication",
+      "database"
+    ],
+    "source_repo": "LuisLuii/FastAPIQuickCRUD",
+    "source_file": "src/fastapi_quickcrud/misc/abstract_route.py",
+    "complexity_score": 18
   },
   {
-    "instruction": "Create a FastAPI endpoint that sends email in background after user registration",
-    "input": "",
-    "output": "from fastapi import FastAPI, BackgroundTasks\nfrom pydantic import BaseModel, EmailStr\nimport smtplib\nfrom email.mime.text import MIMEText\n\napp = FastAPI()\n\nclass User(BaseModel):\n    email: EmailStr\n    name: str\n\ndef send_welcome_email(email: str, name: str):\n    # Email sending logic\n    msg = MIMEText(f\"Welcome {name}!\")\n    msg['Subject'] = 'Welcome to our platform'\n    msg['From'] = 'noreply@example.com'\n    msg['To'] = email\n    \n    # Send email logic here\n    print(f\"Sending email to {email}\")\n\n@app.post(\"/register\")\nasync def register_user(user: User, background_tasks: BackgroundTasks):\n    background_tasks.add_task(send_welcome_email, user.email, user.name)\n    return {\"message\": \"User registered successfully\"}",
-    "category": "background-tasks",
+    "instruction": "Create a FastAPI DELETE endpoint with authentication and with database integration",
+    "input": "Include database operations",
+    "output": "            @api.delete(path, status_code=200, response_model=response_model, dependencies=dependencies)\n            def delete_many_by_query(response: Response,\n                                     request: Request,\n                                     query=Depends(request_query_model),\n                                     session=Depends(db_session)):\n                filter_stmt = query_service.model_query(filter_args=query.__dict__,\n                                                        session=session)\n\n                delete_instance = [i for i in session.execute(filter_stmt).scalars()]\n\n                return parsing_service.delete_many(response_model=response_model,\n                                                   sql_execute_results=delete_instance,\n                                                   fastapi_response=response,\n                                                   session=session)",
+    "category": "authentication",
+    "difficulty": "intermediate",
+    "tags": [
+      "fastapi",
+      "delete",
+      "authentication",
+      "database"
+    ],
+    "source_repo": "LuisLuii/FastAPIQuickCRUD",
+    "source_file": "src/fastapi_quickcrud/misc/abstract_route.py",
+    "complexity_score": 17
+  },
+  {
+    "instruction": "Create a FastAPI POST endpoint with Pydantic validation and with authentication",
+    "input": "Include proper request validation",
+    "output": "            @api.post(\"\", status_code=303, response_class=Response, dependencies=dependencies)\n            def create_one_and_redirect_to_get_one_api_with_primary_key(\n                    request: Request,\n                    insert_args: request_body_model = Depends(),\n                    session=Depends(db_session),\n            ):\n\n                new_inserted_data = crud_service.insert_one(insert_args=insert_args.__dict__)\n\n                execute_service.add(session, new_inserted_data)\n                try:\n                    execute_service.flush(session)\n                except IntegrityError as e:\n                    err_msg, = e.orig.args\n                    if 'unique constraint' not in err_msg.lower():\n                        raise e\n                    result = Response(status_code=HTTPStatus.CONFLICT)\n                    return result\n\n                return result_parser.post_redirect_get(response_model=response_model,\n                                                       sql_execute_result=new_inserted_data,\n                                                       fastapi_request=request,\n                                                       session=session)",
+    "category": "authentication",
     "difficulty": "advanced",
     "tags": [
       "fastapi",
-      "background-tasks",
-      "email"
-    ]
+      "post",
+      "pydantic",
+      "authentication"
+    ],
+    "source_repo": "LuisLuii/FastAPIQuickCRUD",
+    "source_file": "src/fastapi_quickcrud/misc/abstract_route.py",
+    "complexity_score": 31
   },
   {
-    "instruction": "Create a FastAPI WebSocket endpoint for real-time chat",
-    "input": "",
-    "output": "from fastapi import FastAPI, WebSocket, WebSocketDisconnect\nfrom typing import List\n\napp = FastAPI()\n\nclass ConnectionManager:\n    def __init__(self):\n        self.active_connections: List[WebSocket] = []\n\n    async def connect(self, websocket: WebSocket):\n        await websocket.accept()\n        self.active_connections.append(websocket)\n\n    def disconnect(self, websocket: WebSocket):\n        self.active_connections.remove(websocket)\n\n    async def send_personal_message(self, message: str, websocket: WebSocket):\n        await websocket.send_text(message)\n\n    async def broadcast(self, message: str):\n        for connection in self.active_connections:\n            await connection.send_text(message)\n\nmanager = ConnectionManager()\n\n@app.websocket(\"/ws/{client_id}\")\nasync def websocket_endpoint(websocket: WebSocket, client_id: int):\n    await manager.connect(websocket)\n    try:\n        while True:\n            data = await websocket.receive_text()\n            await manager.send_personal_message(f\"You wrote: {data}\", websocket)\n            await manager.broadcast(f\"Client #{client_id} says: {data}\")\n    except WebSocketDisconnect:\n        manager.disconnect(websocket)\n        await manager.broadcast(f\"Client #{client_id} left the chat\")",
-    "category": "websocket",
+    "instruction": "Create a FastAPI PATCH endpoint with Pydantic validation and with authentication and with database integration",
+    "input": "Include proper request validation and database operations",
+    "output": "            @api.patch(path,\n                       status_code=200,\n                       response_model=Union[response_model],\n                       dependencies=dependencies)\n            def partial_update_one_by_primary_key(\n                    response: Response,\n                    primary_key: request_url_param_model = Depends(),\n                    patch_data: request_body_model = Depends(),\n                    extra_query: request_query_model = Depends(),\n                    session=Depends(db_session),\n            ):\n                filter_stmt = crud_service.model_query(filter_args=primary_key.__dict__,\n                                                       extra_args=extra_query.__dict__,\n                                                       session=session)\n\n                update_instance = session.execute(filter_stmt).scalar()\n\n                try:\n                    return result_parser.update(response_model=response_model,\n                                                sql_execute_result=update_instance,\n                                                update_args=patch_data.__dict__,\n                                                fastapi_response=response,\n                                                session=session,\n                                                update_one=True)\n                except IntegrityError as e:\n                    err_msg, = e.orig.args\n                    if 'unique constraint' not in err_msg.lower():\n                        raise e\n                    result = Response(status_code=HTTPStatus.CONFLICT)\n                    return result",
+    "category": "authentication",
     "difficulty": "advanced",
     "tags": [
       "fastapi",
-      "websocket",
-      "real-time",
-      "chat"
-    ]
+      "patch",
+      "pydantic",
+      "authentication",
+      "database"
+    ],
+    "source_repo": "LuisLuii/FastAPIQuickCRUD",
+    "source_file": "src/fastapi_quickcrud/misc/abstract_route.py",
+    "complexity_score": 38
+  },
+  {
+    "instruction": "Create a FastAPI PATCH endpoint with Pydantic validation and with authentication and with database integration",
+    "input": "Include proper request validation and database operations",
+    "output": "            @api.patch(path,\n                       status_code=200,\n                       response_model=response_model,\n                       dependencies=dependencies)\n            def partial_update_many_by_query(\n                    response: Response,\n                    patch_data: request_body_model = Depends(),\n                    extra_query: request_query_model = Depends(),\n                    session=Depends(db_session)\n            ):\n                filter_stmt = crud_service.model_query(filter_args=extra_query.__dict__,\n                                                       session=session)\n\n                data_instance = [i for i in session.execute(filter_stmt).scalars()]\n\n                if not data_instance:\n                    return Response(status_code=HTTPStatus.NO_CONTENT)\n                try:\n                    return result_parser.update(response_model=response_model,\n                                                sql_execute_result=data_instance,\n                                                fastapi_response=response,\n                                                update_args=patch_data.__dict__,\n                                                session=session,\n                                                update_one=False)\n                except IntegrityError as e:\n                    err_msg, = e.orig.args\n                    if 'unique constraint' not in err_msg.lower():\n                        raise e\n                    result = Response(status_code=HTTPStatus.CONFLICT)\n                    return result",
+    "category": "authentication",
+    "difficulty": "advanced",
+    "tags": [
+      "fastapi",
+      "patch",
+      "pydantic",
+      "authentication",
+      "database"
+    ],
+    "source_repo": "LuisLuii/FastAPIQuickCRUD",
+    "source_file": "src/fastapi_quickcrud/misc/abstract_route.py",
+    "complexity_score": 38
+  },
+  {
+    "instruction": "Create a FastAPI PUT endpoint with Pydantic validation and with authentication and with database integration",
+    "input": "Include proper request validation and database operations",
+    "output": "            @api.put(path, status_code=200, response_model=response_model, dependencies=dependencies)\n            def entire_update_by_primary_key(\n                    response: Response,\n                    primary_key: request_url_param_model = Depends(),\n                    update_data: request_body_model = Depends(),\n                    extra_query: request_query_model = Depends(),\n                    session=Depends(db_session),\n            ):\n                filter_stmt = crud_service.model_query(filter_args=primary_key.__dict__,\n                                                       extra_args=extra_query.__dict__,\n                                                       session=session)\n\n                data_instance = session.execute(filter_stmt).scalar()\n\n                if not data_instance:\n                    return Response(status_code=HTTPStatus.NOT_FOUND)\n                try:\n                    return result_parser.update(response_model=response_model,\n                                                sql_execute_result=data_instance,\n                                                fastapi_response=response,\n                                                update_args=update_data.__dict__,\n                                                session=session,\n                                                update_one=True)\n                except IntegrityError as e:\n                    err_msg, = e.orig.args\n                    if 'unique constraint' not in err_msg.lower():\n                        raise e\n                    result = Response(status_code=HTTPStatus.CONFLICT)\n                    return result",
+    "category": "authentication",
+    "difficulty": "advanced",
+    "tags": [
+      "fastapi",
+      "put",
+      "pydantic",
+      "authentication",
+      "database"
+    ],
+    "source_repo": "LuisLuii/FastAPIQuickCRUD",
+    "source_file": "src/fastapi_quickcrud/misc/abstract_route.py",
+    "complexity_score": 37
+  },
+  {
+    "instruction": "Create a FastAPI PUT endpoint with Pydantic validation and with authentication and with database integration",
+    "input": "Include proper request validation and database operations",
+    "output": "            @api.put(path, status_code=200, response_model=response_model, dependencies=dependencies)\n            def entire_update_many_by_query(\n                    response: Response,\n                    update_data: request_body_model = Depends(),\n                    extra_query: request_query_model = Depends(),\n                    session=Depends(db_session),\n            ):\n\n                filter_stmt = crud_service.model_query(filter_args=extra_query.__dict__,\n                                                       session=session)\n\n                data_instance = [i for i in session.execute(filter_stmt).scalars()]\n\n                if not data_instance:\n                    return Response(status_code=HTTPStatus.NO_CONTENT)\n                try:\n                    return result_parser.update(response_model=response_model,\n                                                sql_execute_result=data_instance,\n                                                fastapi_response=response,\n                                                update_args=update_data.__dict__,\n                                                session=session,\n                                                update_one=False)\n                except IntegrityError as e:\n                    err_msg, = e.orig.args\n                    if 'unique constraint' not in err_msg.lower():\n                        raise e\n                    result = Response(status_code=HTTPStatus.CONFLICT)\n                    return result",
+    "category": "authentication",
+    "difficulty": "advanced",
+    "tags": [
+      "fastapi",
+      "put",
+      "pydantic",
+      "authentication",
+      "database"
+    ],
+    "source_repo": "LuisLuii/FastAPIQuickCRUD",
+    "source_file": "src/fastapi_quickcrud/misc/abstract_route.py",
+    "complexity_score": 36
+  },
+  {
+    "instruction": "Create a FastAPI GET endpoint with authentication and with database integration",
+    "input": "Include database operations",
+    "output": "            @api.get(path, dependencies=dependencies, response_model=response_model, name=function_name)\n            def get_one_with_foreign_tree(response: Response,\n                                          request: Request,\n                                          url_param=Depends(request_url_param_model),\n                                          query=Depends(request_query_model),\n                                          session=Depends(\n                                              db_session)\n                                          ):\n                target_model = request.url.path.split(\"/\")[-2]\n                join = query.__dict__.pop('join_foreign_table', None)\n\n                stmt = query_service.get_one_with_foreign_pk(query=query.__dict__,\n                                                             join_mode=join,\n                                                             abstract_param=url_param.__dict__,\n                                                             target_model=target_model)\n                query_result = execute_service.execute(session, stmt)\n                parsed_response = parsing_service.find_one(response_model=response_model,\n                                                           sql_execute_result=query_result,\n                                                           fastapi_response=response,\n                                                           join_mode=join,\n                                                           session=session)\n                return parsed_response",
+    "category": "authentication",
+    "difficulty": "intermediate",
+    "tags": [
+      "fastapi",
+      "get",
+      "authentication",
+      "database"
+    ],
+    "source_repo": "LuisLuii/FastAPIQuickCRUD",
+    "source_file": "src/fastapi_quickcrud/misc/abstract_route.py",
+    "complexity_score": 25
+  },
+  {
+    "instruction": "Create a FastAPI GET endpoint with authentication and with database integration",
+    "input": "Include database operations",
+    "output": "            @api.get(path, dependencies=dependencies, response_model=response_model, name=function_name)\n            def get_many_with_foreign_tree(response: Response,\n                                           request: Request,\n                                           url_param=Depends(request_url_param_model),\n                                           query=Depends(request_query_model),\n                                           session=Depends(\n                                               db_session)\n                                           ):\n                target_model = request.url.path.split(\"/\")[-1]\n                join = query.__dict__.pop('join_foreign_table', None)\n                stmt = query_service.get_many(query=query.__dict__, join_mode=join, abstract_param=url_param.__dict__,\n                                              target_model=target_model)\n                query_result = execute_service.execute(session, stmt)\n                parsed_response = parsing_service.find_many(response_model=response_model,\n                                                            sql_execute_result=query_result,\n                                                            fastapi_response=response,\n                                                            join_mode=join,\n                                                            session=session)\n\n                return parsed_response",
+    "category": "authentication",
+    "difficulty": "intermediate",
+    "tags": [
+      "fastapi",
+      "get",
+      "authentication",
+      "database"
+    ],
+    "source_repo": "LuisLuii/FastAPIQuickCRUD",
+    "source_file": "src/fastapi_quickcrud/misc/abstract_route.py",
+    "complexity_score": 23
+  },
+  {
+    "instruction": "Create a FastAPI POST endpoint with Pydantic validation and with authentication and with database integration",
+    "input": "Include proper request validation and database operations",
+    "output": "            @api.post(path, status_code=201, response_model=response_model, dependencies=dependencies)\n            def insert_one_and_support_upsert(\n                    response: Response,\n                    request: Request,\n                    query: request_body_model = Depends(request_body_model),\n                    session=Depends(db_session)\n            ):\n\n                stmt = query_service.upsert(insert_arg=query.__dict__,\n                                            unique_fields=unique_list)\n                try:\n                    query_result = execute_service.execute(session, stmt)\n                except IntegrityError as e:\n                    err_msg, = e.orig.args\n                    if 'unique constraint' not in err_msg.lower():\n                        raise e\n                    result = Response(status_code=HTTPStatus.CONFLICT, content=err_msg)\n                    return result\n                return parsing_service.upsert_one(response_model=response_model,\n                                                  sql_execute_result=query_result,\n                                                  fastapi_response=response,\n                                                  session=session)",
+    "category": "authentication",
+    "difficulty": "intermediate",
+    "tags": [
+      "fastapi",
+      "post",
+      "pydantic",
+      "authentication",
+      "database"
+    ],
+    "source_repo": "LuisLuii/FastAPIQuickCRUD",
+    "source_file": "src/fastapi_quickcrud/misc/abstract_route.py",
+    "complexity_score": 30
+  },
+  {
+    "instruction": "Create a FastAPI POST endpoint with Pydantic validation and with authentication and with database integration",
+    "input": "Include proper request validation and database operations",
+    "output": "            @api.post(path, status_code=201, response_model=response_model, dependencies=dependencies)\n            def insert_many_and_support_upsert(\n                    response: Response,\n                    request: Request,\n                    query: request_body_model = Depends(request_body_model),\n                    session=Depends(db_session)\n            ):\n                stmt = query_service.upsert(insert_arg=query.__dict__,\n                                            unique_fields=unique_list,\n                                            upsert_one=False)\n                try:\n                    query_result = execute_service.execute(session, stmt)\n                except IntegrityError as e:\n                    err_msg, = e.orig.args\n                    if 'unique constraint' not in err_msg.lower():\n                        raise e\n                    result = Response(status_code=HTTPStatus.CONFLICT, content=err_msg)\n                    return result\n                return parsing_service.upsert_many(response_model=response_model,\n                                                   sql_execute_result=query_result,\n                                                   fastapi_response=response,\n                                                   session=session)",
+    "category": "authentication",
+    "difficulty": "intermediate",
+    "tags": [
+      "fastapi",
+      "post",
+      "pydantic",
+      "authentication",
+      "database"
+    ],
+    "source_repo": "LuisLuii/FastAPIQuickCRUD",
+    "source_file": "src/fastapi_quickcrud/misc/abstract_route.py",
+    "complexity_score": 30
+  },
+  {
+    "instruction": "Create a FastAPI POST endpoint with Pydantic validation and with authentication and with database integration",
+    "input": "Include proper request validation and database operations",
+    "output": "            @api.post(path, status_code=201, response_model=response_model, dependencies=dependencies)\n            def insert_one_and_support_upsert(\n                    response: Response,\n                    request: Request,\n                    query: request_body_model = Depends(request_body_model),\n                    session=Depends(db_session)\n            ):\n\n                stmt = query_service.upsert(insert_arg=query.__dict__,\n                                            unique_fields=unique_list)\n                try:\n                    query_result = execute_service.execute(session, stmt)\n                except IntegrityError as e:\n                    err_msg, = e.orig.args\n                    if 'unique constraint' not in err_msg.lower():\n                        raise e\n                    result = Response(status_code=HTTPStatus.CONFLICT)\n                    return result\n                return parsing_service.upsert_one(response_model=response_model,\n                                                  sql_execute_result=query_result,\n                                                  fastapi_response=response,\n                                                  session=session)",
+    "category": "authentication",
+    "difficulty": "intermediate",
+    "tags": [
+      "fastapi",
+      "post",
+      "pydantic",
+      "authentication",
+      "database"
+    ],
+    "source_repo": "LuisLuii/FastAPIQuickCRUD",
+    "source_file": "src/fastapi_quickcrud/misc/abstract_route.py",
+    "complexity_score": 30
+  },
+  {
+    "instruction": "Create a FastAPI POST endpoint with Pydantic validation and with authentication and with database integration",
+    "input": "Include proper request validation and database operations",
+    "output": "            @api.post(path, status_code=201, response_model=response_model, dependencies=dependencies)\n            def insert_many_and_support_upsert(\n                    response: Response,\n                    request: Request,\n                    query: request_body_model = Depends(request_body_model),\n                    session=Depends(db_session)\n            ):\n\n                stmt = query_service.upsert(insert_arg=query.__dict__,\n                                            unique_fields=unique_list,\n                                            upsert_one=False)\n                try:\n                    query_result = execute_service.execute(session, stmt)\n                except IntegrityError as e:\n                    err_msg, = e.orig.args\n                    if 'unique constraint' not in err_msg.lower():\n                        raise e\n                    result = Response(status_code=HTTPStatus.CONFLICT)\n                    return result\n                return parsing_service.upsert_many(response_model=response_model,\n                                                   sql_execute_result=query_result,\n                                                   fastapi_response=response,\n                                                   session=session)",
+    "category": "authentication",
+    "difficulty": "advanced",
+    "tags": [
+      "fastapi",
+      "post",
+      "pydantic",
+      "authentication",
+      "database"
+    ],
+    "source_repo": "LuisLuii/FastAPIQuickCRUD",
+    "source_file": "src/fastapi_quickcrud/misc/abstract_route.py",
+    "complexity_score": 31
+  },
+  {
+    "instruction": "Create a FastAPI GET endpoint",
+    "input": "Include proper error handling and response formatting",
+    "output": "@app.get(\n    \"/people\",\n    response_model=PeopleRead,\n    description=\"List all the available persons\",\n    tags=[\"people\"]\n)\ndef _list_people():\n    # TODO Filters\n    return PeopleRepository.list()",
+    "category": "endpoints",
+    "difficulty": "beginner",
+    "tags": [
+      "fastapi",
+      "get"
+    ],
+    "source_repo": "David-Lor/FastAPI-Pydantic-Mongo_Sample_CRUD_API",
+    "source_file": "people_api/app.py",
+    "complexity_score": 9
+  },
+  {
+    "instruction": "Create a FastAPI GET endpoint",
+    "input": "Include proper error handling and response formatting",
+    "output": "@app.get(\n    \"/people/{person_id}\",\n    response_model=PersonRead,\n    description=\"Get a single person by its unique ID\",\n    responses=get_exception_responses(PersonNotFoundException),\n    tags=[\"people\"]\n)\ndef _get_person(person_id: str):\n    return PeopleRepository.get(person_id)",
+    "category": "endpoints",
+    "difficulty": "beginner",
+    "tags": [
+      "fastapi",
+      "get"
+    ],
+    "source_repo": "David-Lor/FastAPI-Pydantic-Mongo_Sample_CRUD_API",
+    "source_file": "people_api/app.py",
+    "complexity_score": 11
+  },
+  {
+    "instruction": "Create a FastAPI POST endpoint",
+    "input": "Include proper error handling and response formatting",
+    "output": "@app.post(\n    \"/people\",\n    description=\"Create a new person\",\n    response_model=PersonRead,\n    status_code=statuscode.HTTP_201_CREATED,\n    responses=get_exception_responses(PersonAlreadyExistsException),\n    tags=[\"people\"]\n)\ndef _create_person(create: PersonCreate):\n    return PeopleRepository.create(create)",
+    "category": "endpoints",
+    "difficulty": "beginner",
+    "tags": [
+      "fastapi",
+      "post"
+    ],
+    "source_repo": "David-Lor/FastAPI-Pydantic-Mongo_Sample_CRUD_API",
+    "source_file": "people_api/app.py",
+    "complexity_score": 12
+  },
+  {
+    "instruction": "Create a FastAPI PATCH endpoint",
+    "input": "Include proper error handling and response formatting",
+    "output": "@app.patch(\n    \"/people/{person_id}\",\n    description=\"Update a single person by its unique ID, providing the fields to update\",\n    status_code=statuscode.HTTP_204_NO_CONTENT,\n    responses=get_exception_responses(PersonNotFoundException, PersonAlreadyExistsException),\n    tags=[\"people\"]\n)\ndef _update_person(person_id: str, update: PersonUpdate):\n    PeopleRepository.update(person_id, update)",
+    "category": "endpoints",
+    "difficulty": "beginner",
+    "tags": [
+      "fastapi",
+      "patch"
+    ],
+    "source_repo": "David-Lor/FastAPI-Pydantic-Mongo_Sample_CRUD_API",
+    "source_file": "people_api/app.py",
+    "complexity_score": 11
+  },
+  {
+    "instruction": "Create a FastAPI DELETE endpoint",
+    "input": "Include proper error handling and response formatting",
+    "output": "@app.delete(\n    \"/people/{person_id}\",\n    description=\"Delete a single person by its unique ID\",\n    status_code=statuscode.HTTP_204_NO_CONTENT,\n    responses=get_exception_responses(PersonNotFoundException),\n    tags=[\"people\"]\n)\ndef _delete_person(person_id: str):\n    PeopleRepository.delete(person_id)",
+    "category": "endpoints",
+    "difficulty": "beginner",
+    "tags": [
+      "fastapi",
+      "delete"
+    ],
+    "source_repo": "David-Lor/FastAPI-Pydantic-Mongo_Sample_CRUD_API",
+    "source_file": "people_api/app.py",
+    "complexity_score": 11
+  },
+  {
+    "instruction": "Create a FastAPI POST endpoint with database integration",
+    "input": "Include database operations",
+    "output": "@router.post(\"/\", response_description=\"Create a new book\", status_code=status.HTTP_201_CREATED, response_model=Book)\ndef create_book(request: Request, book: Book = Body(...)):\n    book = jsonable_encoder(book)\n    new_book = request.app.database[\"books\"].insert_one(book)\n    created_book = request.app.database[\"books\"].find_one(\n        {\"_id\": new_book.inserted_id}\n    )\n\n    return created_book",
+    "category": "database",
+    "difficulty": "beginner",
+    "tags": [
+      "fastapi",
+      "post",
+      "database"
+    ],
+    "source_repo": "mongodb-developer/pymongo-fastapi-crud",
+    "source_file": "routes.py",
+    "complexity_score": 9
+  },
+  {
+    "instruction": "Create a FastAPI GET endpoint with database integration",
+    "input": "Include database operations",
+    "output": "@router.get(\"/\", response_description=\"List all books\", response_model=List[Book])\ndef list_books(request: Request):\n    books = list(request.app.database[\"books\"].find(limit=100))\n    return books",
+    "category": "database",
+    "difficulty": "beginner",
+    "tags": [
+      "fastapi",
+      "get",
+      "database"
+    ],
+    "source_repo": "mongodb-developer/pymongo-fastapi-crud",
+    "source_file": "routes.py",
+    "complexity_score": 4
+  },
+  {
+    "instruction": "Create a FastAPI GET endpoint with database integration",
+    "input": "Include database operations",
+    "output": "@router.get(\"/{id}\", response_description=\"Get a single book by id\", response_model=Book)\ndef find_book(id: str, request: Request):\n    if (book := request.app.database[\"books\"].find_one({\"_id\": id})) is not None:\n        return book\n\n    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f\"Book with ID {id} not found\")",
+    "category": "database",
+    "difficulty": "beginner",
+    "tags": [
+      "fastapi",
+      "get",
+      "database"
+    ],
+    "source_repo": "mongodb-developer/pymongo-fastapi-crud",
+    "source_file": "routes.py",
+    "complexity_score": 8
+  },
+  {
+    "instruction": "Create a FastAPI PUT endpoint with database integration",
+    "input": "Include database operations",
+    "output": "@router.put(\"/{id}\", response_description=\"Update a book\", response_model=Book)\ndef update_book(id: str, request: Request, book: BookUpdate = Body(...)):\n    book = {k: v for k, v in book.dict().items() if v is not None}\n\n    if len(book) >= 1:\n        update_result = request.app.database[\"books\"].update_one(\n            {\"_id\": id}, {\"$set\": book}\n        )\n\n        if update_result.modified_count == 0:\n            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f\"Book with ID {id} not found\")\n\n    if (\n        existing_book := request.app.database[\"books\"].find_one({\"_id\": id})\n    ) is not None:\n        return existing_book\n\n    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f\"Book with ID {id} not found\")",
+    "category": "database",
+    "difficulty": "intermediate",
+    "tags": [
+      "fastapi",
+      "put",
+      "database"
+    ],
+    "source_repo": "mongodb-developer/pymongo-fastapi-crud",
+    "source_file": "routes.py",
+    "complexity_score": 20
+  },
+  {
+    "instruction": "Create a FastAPI DELETE endpoint with database integration",
+    "input": "Include database operations",
+    "output": "@router.delete(\"/{id}\", response_description=\"Delete a book\")\ndef delete_book(id: str, request: Request, response: Response):\n    delete_result = request.app.database[\"books\"].delete_one({\"_id\": id})\n\n    if delete_result.deleted_count == 1:\n        response.status_code = status.HTTP_204_NO_CONTENT\n        return response\n\n    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f\"Book with ID {id} not found\")",
+    "category": "database",
+    "difficulty": "beginner",
+    "tags": [
+      "fastapi",
+      "delete",
+      "database"
+    ],
+    "source_repo": "mongodb-developer/pymongo-fastapi-crud",
+    "source_file": "routes.py",
+    "complexity_score": 11
+  },
+  {
+    "instruction": "Create a FastAPI POST endpoint with authentication and with database integration",
+    "input": "Include database operations",
+    "output": "@router.post(\"/login\", response_model=Token)\ndef login_for_access_token(\n    db: Session = Depends(get_db), form_data: OAuth2PasswordRequestForm = Depends()\n) -> Dict[str, Any]:\n    \"\"\"\n    Endpoint for user login. Authenticates the user using the provided\n    email and password.\n\n    Parameters:\n        - db (Session): The database session.\n        - form_data (OAuth2PasswordRequestForm): The form data\n        containing the username and password.\n\n    Returns:\n        - Dict[str, Any]: A dictionary containing the access token and token type.\n    \"\"\"\n    user = user_crud.authenticate_user(\n        db, email=form_data.username, password=form_data.password\n    )\n    if not user:\n        raise HTTPException(\n            status_code=status.HTTP_400_BAD_REQUEST,\n            detail=\"Incorrect email or password\",\n        )\n    if not user_crud.is_active_user(user):\n        raise HTTPException(\n            status_code=status.HTTP_400_BAD_REQUEST, detail=\"Inactive user\"\n        )\n\n    access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)\n    access_token = security.create_access_token(\n        subject=user.id, expires_delta=access_token_expires\n    )\n    return {\"access_token\": access_token, \"token_type\": \"bearer\"}",
+    "category": "authentication",
+    "difficulty": "advanced",
+    "tags": [
+      "fastapi",
+      "post",
+      "authentication",
+      "database"
+    ],
+    "source_repo": "JakubPluta/gymhero",
+    "source_file": "gymhero/api/routes/auth.py",
+    "complexity_score": 42
+  },
+  {
+    "instruction": "Create a FastAPI POST endpoint with authentication and with database integration",
+    "input": "Include database operations",
+    "output": "@router.post(\"/register\", response_model=dict, status_code=status.HTTP_201_CREATED)\ndef register(user_register: UserRegister, db: Session = Depends(get_db)):\n    user = user_crud.get_user_by_email(db, email=user_register.email)\n    if user:\n        raise HTTPException(\n            status_code=status.HTTP_409_CONFLICT,\n            detail=f\"The user with this {user_register.email} already exists in the system\",\n        )\n\n    user_in = UserInDB(\n        **user_register.model_dump(exclude_unset=True, exclude_defaults=True),\n        hashed_password=security.get_password_hash(user_register.password),\n    )\n\n    user_crud.create(db, user_in)\n    return {\"message\": \"User created successfully\"}",
+    "category": "authentication",
+    "difficulty": "intermediate",
+    "tags": [
+      "fastapi",
+      "post",
+      "authentication",
+      "database"
+    ],
+    "source_repo": "JakubPluta/gymhero",
+    "source_file": "gymhero/api/routes/auth.py",
+    "complexity_score": 24
+  },
+  {
+    "instruction": "Create a FastAPI GET endpoint with authentication and with database integration",
+    "input": "Include database operations",
+    "output": "@router.get(\n    \"/all\",\n    response_model=List[Optional[BodyPartInDB]],\n    status_code=status.HTTP_200_OK,\n)\ndef fetch_body_parts(\n    db: Session = Depends(get_db),\n    pagination_params: dict = Depends(get_pagination_params),\n):\n    \"\"\"\n    Fetches the body parts from the database based on pagination parameters.\n\n    Parameters:\n        db (Session): The database session.\n        pagination_params (dict): The pagination parameters.\n\n    Returns:\n        BodyPartsInDB: The fetched body parts from the database.\n    \"\"\"\n    skip, limit = pagination_params\n    return bodypart_crud.get_many(db, skip=skip, limit=limit)",
+    "category": "authentication",
+    "difficulty": "intermediate",
+    "tags": [
+      "fastapi",
+      "get",
+      "authentication",
+      "database"
+    ],
+    "source_repo": "JakubPluta/gymhero",
+    "source_file": "gymhero/api/routes/body_part.py",
+    "complexity_score": 27
+  },
+  {
+    "instruction": "Create a FastAPI GET endpoint with authentication and with database integration",
+    "input": "Include database operations",
+    "output": "@router.get(\n    \"/{body_part_id}\",\n    status_code=status.HTTP_200_OK,\n    response_model=Optional[BodyPartInDB],\n)\ndef fetch_body_part_by_id(body_part_id: int, db: Session = Depends(get_db)):\n    \"\"\"\n    Fetches a body part by its ID.\n\n    Parameters:\n        body_part_id (int): The ID of the body part to fetch.\n        db (Session, optional): The database session. Defaults to Depends(get_db).\n\n    Returns:\n        body_part: The fetched body part.\n\n    Raises:\n        HTTPException: If the body part with the given ID is not found.\n    \"\"\"\n    body_part = bodypart_crud.get_one(db, BodyPart.id == body_part_id)\n\n    if body_part is None:\n        raise HTTPException(\n            status_code=status.HTTP_404_NOT_FOUND,\n            detail=f\"Body part with id {body_part_id} not found\",\n        )\n\n    return body_part",
+    "category": "authentication",
+    "difficulty": "advanced",
+    "tags": [
+      "fastapi",
+      "get",
+      "authentication",
+      "database"
+    ],
+    "source_repo": "JakubPluta/gymhero",
+    "source_file": "gymhero/api/routes/body_part.py",
+    "complexity_score": 36
+  },
+  {
+    "instruction": "Create a FastAPI GET endpoint with authentication and with database integration",
+    "input": "Include database operations",
+    "output": "@router.get(\n    \"/name/{body_part_name}\",\n    response_model=Optional[BodyPartInDB],\n    status_code=status.HTTP_200_OK,\n)\ndef fetch_body_part_by_name(body_part_name: str, db: Session = Depends(get_db)):\n    \"\"\"\n    Fetches a body part from the database by its name.\n\n    Parameters:\n        body_part_name (str): The name of the body part.\n        db (Session): The database session.\n\n    Returns:\n        BodyPartInDB: The body part fetched from the database.\n\n    Raises:\n        HTTPException: If the body part with the\n        specified name is not found in the database.\n    \"\"\"\n    body_part = bodypart_crud.get_one(db, BodyPart.name == body_part_name)\n    if body_part is None:\n        raise HTTPException(\n            status_code=status.HTTP_404_NOT_FOUND,\n            detail=f\"Body part with name {body_part_name} not found\",\n        )\n    return body_part",
+    "category": "authentication",
+    "difficulty": "advanced",
+    "tags": [
+      "fastapi",
+      "get",
+      "authentication",
+      "database"
+    ],
+    "source_repo": "JakubPluta/gymhero",
+    "source_file": "gymhero/api/routes/body_part.py",
+    "complexity_score": 35
+  },
+  {
+    "instruction": "Create a FastAPI POST endpoint with authentication and with database integration",
+    "input": "Include database operations",
+    "output": "@router.post(\"/\", response_model=BodyPartInDB, status_code=status.HTTP_201_CREATED)\ndef create_body_part(\n    body_part: BodyPartCreate,\n    db: Session = Depends(get_db),\n    user: User = Depends(get_current_superuser),\n) -> BodyPartInDB:\n    \"\"\"\n    Creates a new body part in the database.\n\n    Parameters:\n        body_part: The data of the body part to be created.\n        db: The database session.\n        user: The current superuser.\n\n    Returns:\n        The created body part.\n    \"\"\"\n    try:\n        return bodypart_crud.create(db, obj_create=body_part)\n    except Exception as e:\n        raise HTTPException(\n            status_code=status.HTTP_409_CONFLICT,\n            detail=f\"Body part with name {body_part.name} already exists\",\n        ) from e",
+    "category": "authentication",
+    "difficulty": "advanced",
+    "tags": [
+      "fastapi",
+      "post",
+      "authentication",
+      "database"
+    ],
+    "source_repo": "JakubPluta/gymhero",
+    "source_file": "gymhero/api/routes/body_part.py",
+    "complexity_score": 37
+  },
+  {
+    "instruction": "Create a FastAPI DELETE endpoint with authentication and with database integration",
+    "input": "Include database operations",
+    "output": "@router.delete(\n    \"/{body_part_id}\", status_code=status.HTTP_200_OK, response_model=Dict[str, str]\n)\ndef delete_body_part(\n    body_part_id: int,\n    db: Session = Depends(get_db),\n    user: User = Depends(get_current_superuser),\n):\n    \"\"\"\n    Delete a body part by its ID.\n\n    Parameters:\n        body_part_id (int): The ID of the body part to be deleted.\n        db (Session): The database session.\n        user (User): The current superuser.\n\n    Raises:\n        HTTPException: If the body part with the given ID is\n        not found or the user does not have permission to delete it.\n        HTTPException: If there is an error while deleting the body part.\n\n    Returns:\n        dict: A dictionary with a detail message indicating\n        that the body part was deleted.\n    \"\"\"\n    body_part = bodypart_crud.get_one(db, BodyPart.id == body_part_id)\n    if body_part is None:\n        raise HTTPException(\n            status_code=status.HTTP_404_NOT_FOUND,\n            detail=f\"Body part with id {body_part_id} not found. Cannot delete.\",\n        )\n    try:\n        bodypart_crud.delete(db, body_part)\n    except Exception as e:  # pragma: no cover\n        raise HTTPException(\n            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,\n            detail=f\"Couldn't delete body part with id {body_part_id}. Error: {str(e)}\",\n        ) from e  # pragma: no cover\n    return {\"detail\": f\"Body part with id {body_part_id} deleted.\"}",
+    "category": "authentication",
+    "difficulty": "advanced",
+    "tags": [
+      "fastapi",
+      "delete",
+      "authentication",
+      "database"
+    ],
+    "source_repo": "JakubPluta/gymhero",
+    "source_file": "gymhero/api/routes/body_part.py",
+    "complexity_score": 50
+  },
+  {
+    "instruction": "Create a FastAPI PUT endpoint with authentication and with database integration",
+    "input": "Include database operations",
+    "output": "@router.put(\n    \"/{body_part_id}\",\n    response_model=BodyPartInDB,\n    status_code=status.HTTP_200_OK,\n)\ndef update_body_part(\n    body_part_id: int,\n    body_part_update: BodyPartUpdate,\n    db: Session = Depends(get_db),\n    user: User = Depends(get_current_superuser),\n):\n    \"\"\"\n    Update a body part in the database.\n\n    Parameters:\n        body_part_id (int): The ID of the body part to update.\n        body_part_update (BodyPartUpdate): The updated body part data.\n        db (Session): The database session.\n        user (User): The current superuser.\n\n    Raises:\n        HTTPException: If the body part with the given ID is not\n        found or if the user does not have permission to update the body part.\n        HTTPException: If there is an error updating the body part.\n\n    Returns:\n        BodyPartInDB: The updated body part.\n    \"\"\"\n    body_part = bodypart_crud.get_one(db, BodyPart.id == body_part_id)\n    if body_part is None:\n        raise HTTPException(\n            status_code=status.HTTP_404_NOT_FOUND,\n            detail=f\"Body part with id {body_part_id} not found. Cannot update.\",\n        )\n\n    try:\n        body_part = bodypart_crud.update(db, body_part, body_part_update)\n    except Exception as e:  # pragma: no cover\n        raise HTTPException(\n            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,\n            detail=f\"Couldn't update body part with id {body_part_id}. Error: {str(e)}\",\n        ) from e  # pragma: no cover\n    return body_part",
+    "category": "authentication",
+    "difficulty": "advanced",
+    "tags": [
+      "fastapi",
+      "put",
+      "authentication",
+      "database"
+    ],
+    "source_repo": "JakubPluta/gymhero",
+    "source_file": "gymhero/api/routes/body_part.py",
+    "complexity_score": 50
+  },
+  {
+    "instruction": "Create a FastAPI GET endpoint with authentication and with database integration",
+    "input": "Include database operations",
+    "output": "@router.get(\n    \"/all\", response_model=List[Optional[ExerciseInDB]], status_code=status.HTTP_200_OK\n)\ndef fetch_all_exercises(\n    db: Session = Depends(get_db),\n    pagination_params: Tuple[int, int] = Depends(get_pagination_params),\n) -> List[Optional[ExerciseInDB]]:\n    \"\"\"\n    Fetch all exercises.\n\n    This function fetches all exercises from the\n    database based on the pagination parameters.\n\n    Parameters:\n        db (Session): The database session.\n        pagination_params (Tuple[int, int]): The pagination parameters (skip, limit).\n\n    Returns:\n        ExercisesInDB: The list of exercises fetched from the database.\n    \"\"\"\n    skip, limit = pagination_params\n    return exercise_crud.get_many(db, skip=skip, limit=limit)",
+    "category": "authentication",
+    "difficulty": "intermediate",
+    "tags": [
+      "fastapi",
+      "get",
+      "authentication",
+      "database"
+    ],
+    "source_repo": "JakubPluta/gymhero",
+    "source_file": "gymhero/api/routes/exercise.py",
+    "complexity_score": 28
+  },
+  {
+    "instruction": "Create a FastAPI GET endpoint with authentication and with database integration",
+    "input": "Include database operations",
+    "output": "@router.get(\n    \"/my\", response_model=List[Optional[ExerciseInDB]], status_code=status.HTTP_200_OK\n)\ndef fetch_all_exercises_for_owner(\n    db: Session = Depends(get_db),\n    pagination_params: Tuple[int, int] = Depends(get_pagination_params),\n    user: User = Depends(get_current_active_user),\n) -> List[Optional[ExerciseInDB]]:\n    \"\"\"\n    Fetches all exercises for user\n\n    Parameters:\n        db (Session): The database session.\n        pagination_params (Tuple[int, int]): The pagination parameters (skip, limit).\n        user (User): The current active user.\n\n    Returns:\n        ExercisesInDB: The exercises fetched for the owner.\n    \"\"\"\n    skip, limit = pagination_params\n    return exercise_crud.get_many_for_owner(\n        db, skip=skip, limit=limit, owner_id=user.id\n    )",
+    "category": "authentication",
+    "difficulty": "intermediate",
+    "tags": [
+      "fastapi",
+      "get",
+      "authentication",
+      "database"
+    ],
+    "source_repo": "JakubPluta/gymhero",
+    "source_file": "gymhero/api/routes/exercise.py",
+    "complexity_score": 29
+  },
+  {
+    "instruction": "Create a FastAPI GET endpoint with authentication and with database integration",
+    "input": "Include database operations",
+    "output": "@router.get(\n    \"/{exercise_id}\",\n    response_model=Optional[ExerciseInDB],\n    status_code=status.HTTP_200_OK,\n)\ndef fetch_exercise_by_id(\n    exercise_id: int, db: Session = Depends(get_db)\n) -> ExerciseInDB:\n    \"\"\"\n    Fetches an exercise by its ID.\n\n    Parameters:\n        exercise_id (int): The ID of the exercise.\n        db (Session): The database session.\n\n    Returns:\n        ExerciseInDB: The fetched exercise.\n\n    Raises:\n        HTTPException: If the exercise is not found.\n    \"\"\"\n    exercise = exercise_crud.get_one(db, Exercise.id == exercise_id)\n    if exercise is None:\n        raise HTTPException(\n            status_code=status.HTTP_404_NOT_FOUND,\n            detail=f\"Exercise with id {exercise_id} not found\",\n        )\n    return exercise",
+    "category": "authentication",
+    "difficulty": "advanced",
+    "tags": [
+      "fastapi",
+      "get",
+      "authentication",
+      "database"
+    ],
+    "source_repo": "JakubPluta/gymhero",
+    "source_file": "gymhero/api/routes/exercise.py",
+    "complexity_score": 36
+  },
+  {
+    "instruction": "Create a FastAPI GET endpoint with authentication and with database integration",
+    "input": "Include database operations",
+    "output": "@router.get(\n    \"/name/{exercise_name}\",\n    response_model=ExerciseInDB,\n    status_code=status.HTTP_200_OK,\n)\ndef fetch_exercise_by_name(exercise_name: str, db: Session = Depends(get_db)):\n    \"\"\"\n    Fetches an exercise by its name from the database.\n\n    Parameters:\n        exercise_name (str): The name of the exercise.\n        db (Session, optional): The database session. Defaults to Depends(get_db).\n\n    Returns:\n        ExerciseInDB: The exercise retrieved from the database.\n\n    Raises:\n        HTTPException: If the exercise with the given name is not found in the database.\n    \"\"\"\n    exercise = exercise_crud.get_one(db, Exercise.name == exercise_name)\n    if exercise is None:\n        raise HTTPException(\n            status_code=status.HTTP_404_NOT_FOUND,\n            detail=f\"Exercise with name {exercise_name} not found\",\n        )\n    return exercise",
+    "category": "authentication",
+    "difficulty": "advanced",
+    "tags": [
+      "fastapi",
+      "get",
+      "authentication",
+      "database"
+    ],
+    "source_repo": "JakubPluta/gymhero",
+    "source_file": "gymhero/api/routes/exercise.py",
+    "complexity_score": 34
+  },
+  {
+    "instruction": "Create a FastAPI POST endpoint with authentication and with database integration",
+    "input": "Include database operations",
+    "output": "@router.post(\n    \"/\",\n    response_model=ExerciseInDB,\n    status_code=status.HTTP_201_CREATED,\n    response_model_exclude_none=True,\n    response_model_exclude_unset=True,\n)\ndef create_exercise(\n    exercise_create: Annotated[\n        ExerciseCreate,\n        Body(\n            examples=[\n                {\n                    \"name\": \"Bench Press with closed eyes\",\n                    \"target_body_part_id\": 1,\n                    \"exercise_type_id\": 1,\n                    \"level_id\": 1,\n                    \"description\": \"description\",\n                }\n            ]\n        ),\n    ],\n    db: Session = Depends(get_db),\n    user: User = Depends(get_current_active_user),\n):\n    \"\"\"\n    Create an exercise.\n\n    Parameters:\n        exercise_create (ExerciseCreate): The exercise data to be created.\n        db (Session, optional): The database session.\n            Defaults to Depends(get_db).\n        user (User, optional): The current active user.\n\n\n    Returns:\n        ExerciseInDB: The created exercise.\n\n    \"\"\"\n    try:\n        exercise = exercise_crud.create_with_owner(\n            db, exercise_create, owner_id=user.id\n        )\n    except Exception as e:\n        raise HTTPException(\n            status_code=status.HTTP_409_CONFLICT,\n            detail=f\"Exercise with name {exercise_create.name} already exists\",\n        ) from e\n    return exercise",
+    "category": "authentication",
+    "difficulty": "advanced",
+    "tags": [
+      "fastapi",
+      "post",
+      "authentication",
+      "database"
+    ],
+    "source_repo": "JakubPluta/gymhero",
+    "source_file": "gymhero/api/routes/exercise.py",
+    "complexity_score": 50
+  },
+  {
+    "instruction": "Create a FastAPI PUT endpoint with authentication and with database integration",
+    "input": "Include database operations",
+    "output": "@router.put(\n    \"/{exercise_id}\",\n    response_model=ExerciseInDB,\n    status_code=status.HTTP_200_OK,\n)\ndef update_exercise(\n    exercise_id: int,\n    exercise_update: ExerciseUpdate,\n    db: Session = Depends(get_db),\n    user: User = Depends(get_current_active_user),\n):\n    \"\"\"\n    Update an exercise by its ID.\n\n    Parameters:\n        exercise_id (int): The ID of the exercise to be updated.\n        exercise_update (ExerciseUpdate): The updated exercise data.\n        db (Session, optional): The database session.\n            Defaults to Depends(get_db).\n        user (User, optional): The current authenticated user.\n\n\n    Returns:\n        ExerciseInDB: The updated exercise.\n\n    Raises:\n        HTTPException: If the exercise does not exist or\n            the user does not have enough permissions.\n        HTTPException: If there is an error updating\n            the exercise in the database.\n    \"\"\"\n    exercise = exercise_crud.get_one(db, Exercise.id == exercise_id)\n    if exercise is None:\n        raise HTTPException(\n            status_code=status.HTTP_404_NOT_FOUND,\n            detail=f\"Exercise with id {exercise_id} not found\",\n        )\n\n    if exercise.owner_id != user.id or not user.is_superuser:\n        raise HTTPException(\n            status_code=status.HTTP_403_FORBIDDEN,\n            detail=\"Not enough permissions to update exercise\",\n        )\n\n    try:\n        exercise = exercise_crud.update(db, exercise, exercise_update)\n    except Exception as e:  # pragma: no cover\n        raise HTTPException(\n            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,\n            detail=f\"Couldn't update exercise with id {exercise_id}. Error: {str(e)}\",\n        ) from e  # pragma: no cover\n    return exercise",
+    "category": "authentication",
+    "difficulty": "advanced",
+    "tags": [
+      "fastapi",
+      "put",
+      "authentication",
+      "database"
+    ],
+    "source_repo": "JakubPluta/gymhero",
+    "source_file": "gymhero/api/routes/exercise.py",
+    "complexity_score": 50
+  },
+  {
+    "instruction": "Create a FastAPI DELETE endpoint with authentication and with database integration",
+    "input": "Include database operations",
+    "output": "@router.delete(\"/{exercise_id}\", response_model=dict, status_code=status.HTTP_200_OK)\ndef delete_exercise(\n    exercise_id: int,\n    db: Session = Depends(get_db),\n    user: User = Depends(get_current_active_user),\n):\n    \"\"\"\n    Deletes an exercise by its ID.\n\n    Parameters:\n        exercise_id (int): The ID of the exercise to delete.\n        db (Session): The database session.\n        user (User): The current user.\n\n    Returns:\n        dict: A dictionary containing the detail that\n            the exercise with the given ID was deleted.\n\n    Raises:\n        HTTPException: If the exercise with the given ID is not found.\n        HTTPException: If the user does not have enough\n            permissions to delete the exercise.\n        HTTPException: If there is an error while\n            deleting the exercise from the database.\n    \"\"\"\n    exercise = exercise_crud.get_one(db, Exercise.id == exercise_id)\n    if exercise is None:\n        raise HTTPException(\n            status_code=status.HTTP_404_NOT_FOUND,\n            detail=f\"Exercise with id {exercise_id} not found. Cannot delete.\",\n        )\n\n    if exercise.owner_id != user.id or not user.is_superuser:\n        raise HTTPException(\n            status_code=status.HTTP_403_FORBIDDEN,\n            detail=\"Not enough permissions to delete exercise\",\n        )\n\n    try:\n        exercise_crud.delete(db, exercise)\n    except Exception as e:  # pragma: no cover\n        raise HTTPException(\n            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,\n            detail=f\"Couldn't delete exercise with id {exercise_id}. Error: {str(e)}\",\n        ) from e  # pragma: no cover\n\n    return {\"detail\": f\"Exercise with id {exercise_id} deleted.\"}",
+    "category": "authentication",
+    "difficulty": "advanced",
+    "tags": [
+      "fastapi",
+      "delete",
+      "authentication",
+      "database"
+    ],
+    "source_repo": "JakubPluta/gymhero",
+    "source_file": "gymhero/api/routes/exercise.py",
+    "complexity_score": 50
+  },
+  {
+    "instruction": "Create a FastAPI GET endpoint with authentication and with database integration",
+    "input": "Include database operations",
+    "output": "@router.get(\n    \"/all\",\n    response_model=List[Optional[ExerciseTypeInDB]],\n    status_code=status.HTTP_200_OK,\n)\ndef fetch_all_exercise_types(\n    db: Session = Depends(get_db), pagination_params=Depends(get_pagination_params)\n):\n    \"\"\"\n    Fetches all exercise types from the database.\n\n    Parameters:\n        db (Session): The database session.\n        pagination_params (Tuple[int, int]): The pagination args (skip, limit).\n\n    Returns:\n        List[ExerciseTypesInDB]: A list of exercise types from the database.\n    \"\"\"\n    skip, limit = pagination_params\n    return exercise_type_crud.get_many(db, skip=skip, limit=limit)",
+    "category": "authentication",
+    "difficulty": "intermediate",
+    "tags": [
+      "fastapi",
+      "get",
+      "authentication",
+      "database"
+    ],
+    "source_repo": "JakubPluta/gymhero",
+    "source_file": "gymhero/api/routes/exercise_type.py",
+    "complexity_score": 26
+  },
+  {
+    "instruction": "Create a FastAPI GET endpoint with authentication and with database integration",
+    "input": "Include database operations",
+    "output": "@router.get(\n    \"/{exercise_type_id}\",\n    response_model=Optional[ExerciseTypeInDB],\n    status_code=status.HTTP_200_OK,\n)\ndef fetch_exercise_type_by_id(exercise_type_id: int, db: Session = Depends(get_db)):\n    \"\"\"\n    Fetches an exercise type by its ID from the database.\n\n    Parameters:\n        exercise_type_id (int): The ID of the exercise type to fetch.\n        db (Session): The database session. Defaults to Depends(get_db).\n\n    Returns:\n        ExerciseTypeInDB: The fetched exercise type.\n\n    Raises:\n        HTTPException: If the exercise type with the given\n        ID is not found in the database.\n    \"\"\"\n    exercise_type = exercise_type_crud.get_one(db, ExerciseType.id == exercise_type_id)\n    if exercise_type is None:\n        raise HTTPException(\n            status_code=status.HTTP_404_NOT_FOUND,\n            detail=f\"Exercise type with id {exercise_type_id} not found\",\n        )\n    return exercise_type",
+    "category": "authentication",
+    "difficulty": "advanced",
+    "tags": [
+      "fastapi",
+      "get",
+      "authentication",
+      "database"
+    ],
+    "source_repo": "JakubPluta/gymhero",
+    "source_file": "gymhero/api/routes/exercise_type.py",
+    "complexity_score": 35
+  },
+  {
+    "instruction": "Create a FastAPI GET endpoint with authentication and with database integration",
+    "input": "Include database operations",
+    "output": "@router.get(\n    \"/name/{exercise_type_name}\",\n    response_model=Optional[ExerciseTypeInDB],\n    status_code=status.HTTP_200_OK,\n)\ndef fetch_exercise_type_by_name(exercise_type_name: str, db: Session = Depends(get_db)):\n    \"\"\"\n    Fetches an exercise type from the database by its name.\n\n    Parameters:\n        exercise_type_name (str): The name of the exercise type to fetch.\n        db (Session): The database session.\n\n    Returns:\n        ExerciseTypeInDB: The exercise type fetched from the database.\n\n    Raises:\n        HTTPException: If the exercise type with the given name is not found.\n    \"\"\"\n    exercise_type = exercise_type_crud.get_one(\n        db, ExerciseType.name == exercise_type_name\n    )\n    if exercise_type is None:\n        raise HTTPException(\n            status_code=status.HTTP_404_NOT_FOUND,\n            detail=f\"Exercise type with name {exercise_type_name} not found\",\n        )\n    return exercise_type",
+    "category": "authentication",
+    "difficulty": "advanced",
+    "tags": [
+      "fastapi",
+      "get",
+      "authentication",
+      "database"
+    ],
+    "source_repo": "JakubPluta/gymhero",
+    "source_file": "gymhero/api/routes/exercise_type.py",
+    "complexity_score": 36
+  },
+  {
+    "instruction": "Create a FastAPI POST endpoint with authentication and with database integration",
+    "input": "Include database operations",
+    "output": "@router.post(\n    \"/\",\n    response_model=ExerciseTypeInDB,\n    status_code=status.HTTP_201_CREATED,\n)\ndef create_exercise_type(\n    exercise_type_create: ExerciseTypeCreate,\n    db: Session = Depends(get_db),\n    user: User = Depends(get_current_superuser),\n):\n    \"\"\"\n    Creates a new exercise type.\n\n    Parameters:\n        exercise_type_create (ExerciseTypeCreate): The exercise type data to create.\n        db (Session): The database session. Defaults to Depends(get_db).\n        user (User): The current user.\n\n    Returns:\n        ExerciseTypeInDB: The newly created exercise type.\n    \"\"\"\n    try:\n        exercise_type = exercise_type_crud.create(db, exercise_type_create)\n    except Exception as e:\n        raise HTTPException(\n            status_code=status.HTTP_409_CONFLICT,\n            detail=f\"Exercise type with name {exercise_type_create.name} already exists\",\n        ) from e\n    return exercise_type",
+    "category": "authentication",
+    "difficulty": "advanced",
+    "tags": [
+      "fastapi",
+      "post",
+      "authentication",
+      "database"
+    ],
+    "source_repo": "JakubPluta/gymhero",
+    "source_file": "gymhero/api/routes/exercise_type.py",
+    "complexity_score": 42
+  },
+  {
+    "instruction": "Create a FastAPI PUT endpoint with authentication and with database integration",
+    "input": "Include database operations",
+    "output": "@router.put(\n    \"/{exercise_type_id}\",\n    response_model=ExerciseTypeInDB,\n    status_code=status.HTTP_200_OK,\n)\ndef update_exercise_type(\n    exercise_type_id: int,\n    exercise_type_update: ExerciseTypeUpdate,\n    db: Session = Depends(get_db),\n    user: User = Depends(get_current_superuser),\n):\n    \"\"\"\n    Update an exercise type in the database.\n\n    Parameters:\n        exercise_type_id (int): The ID of the exercise type to be updated.\n        exercise_type_update (ExerciseTypeUpdate): The updated exercise type data.\n        db (Session): The database session. Defaults to Depends(get_db).\n        user (User): The current user.\n\n    Returns:\n        ExerciseTypeInDB: The updated exercise type.\n\n    Raises:\n        HTTPException: If the exercise type with the specified ID\n        is not found or if there is an internal server error during the update process.\n    \"\"\"\n    exercise_type = exercise_type_crud.get_one(db, ExerciseType.id == exercise_type_id)\n    if exercise_type is None:\n        raise HTTPException(\n            status_code=status.HTTP_404_NOT_FOUND,\n            detail=f\"Exercise type with id {exercise_type_id} not found.\",\n        )\n\n    try:\n        exercise_type = exercise_type_crud.update(\n            db, exercise_type, exercise_type_update\n        )\n    except Exception as e:  # pragma no cover\n        raise HTTPException(\n            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,\n            detail=f\"Couldn't update exercise type with id {exercise_type_id}. \\\n                Error: {str(e)}\",\n        ) from e  # pragma no cover\n    return exercise_type",
+    "category": "authentication",
+    "difficulty": "advanced",
+    "tags": [
+      "fastapi",
+      "put",
+      "authentication",
+      "database"
+    ],
+    "source_repo": "JakubPluta/gymhero",
+    "source_file": "gymhero/api/routes/exercise_type.py",
+    "complexity_score": 50
+  },
+  {
+    "instruction": "Create a FastAPI DELETE endpoint with authentication and with database integration",
+    "input": "Include database operations",
+    "output": "@router.delete(\n    \"/{exercise_type_id}\",\n    status_code=status.HTTP_200_OK,\n    response_model=Dict[str, str],\n)\ndef delete_exercise_type(\n    exercise_type_id: int,\n    db: Session = Depends(get_db),\n    user: User = Depends(get_current_superuser),\n):\n    \"\"\"\n    Deletes an exercise type with the given exercise_type_id.\n\n    Parameters:\n        exercise_type_id (int): The ID of the exercise type to delete.\n        db (Session): The database session. Defaults to Depends(get_db).\n        user (User): The current user.\n\n    Returns:\n        dict: A dictionary with a detail message indicating whether the\n              exercise type was successfully deleted or not.\n    \"\"\"\n    exercise_type = exercise_type_crud.get_one(db, ExerciseType.id == exercise_type_id)\n    if exercise_type is None:\n        raise HTTPException(\n            status_code=status.HTTP_404_NOT_FOUND,\n            detail=f\"Exercise type with id {exercise_type_id} not found.\",\n        )\n    try:\n        exercise_type_crud.delete(db, exercise_type)\n    except Exception as e:  # pragma: no cover\n        raise HTTPException(\n            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,\n            detail=f\"Couldn't delete exercise type with id {exercise_type_id}. \\\n                Error: {str(e)}\",\n        ) from e  # pragma: no cover\n    return {\"detail\": f\"Exercise type with id {exercise_type_id} deleted.\"}",
+    "category": "authentication",
+    "difficulty": "advanced",
+    "tags": [
+      "fastapi",
+      "delete",
+      "authentication",
+      "database"
+    ],
+    "source_repo": "JakubPluta/gymhero",
+    "source_file": "gymhero/api/routes/exercise_type.py",
+    "complexity_score": 50
+  },
+  {
+    "instruction": "Create a FastAPI GET endpoint with authentication and with database integration",
+    "input": "Include database operations",
+    "output": "@router.get(\n    \"/all\", response_model=List[Optional[LevelInDB]], status_code=status.HTTP_200_OK\n)\ndef fetch_all_levels(\n    db: Session = Depends(get_db),\n    pagination_params: dict = Depends(get_pagination_params),\n):\n    \"\"\"\n    Fetches all levels from the database with pagination.\n\n    Parameters:\n        db (Session): The database session.\n        pagination_params (dict): The pagination parameters.\n            - skip (int): The number of records to skip.\n            - limit (int): The maximum number of records to fetch.\n\n    Returns:\n        results (List[Optional[LevelInDB]]): A list of level\n        objects fetched from the database.\n    \"\"\"\n    skip, limit = pagination_params\n    results = level_crud.get_many(db, skip=skip, limit=limit)\n    return results",
+    "category": "authentication",
+    "difficulty": "intermediate",
+    "tags": [
+      "fastapi",
+      "get",
+      "authentication",
+      "database"
+    ],
+    "source_repo": "JakubPluta/gymhero",
+    "source_file": "gymhero/api/routes/level.py",
+    "complexity_score": 29
+  },
+  {
+    "instruction": "Create a FastAPI GET endpoint with authentication and with database integration",
+    "input": "Include database operations",
+    "output": "@router.get(\n    \"/{level_id}\", response_model=Optional[LevelInDB], status_code=status.HTTP_200_OK\n)\ndef fetch_level_by_id(level_id: int, db: Session = Depends(get_db)):\n    \"\"\"\n    Fetches a level by its ID.\n\n    Parameters:\n        level_id (int): The ID of the level to fetch.\n        db (Session): The database session.\n        Defaults to the result of the `get_db` function.\n\n    Returns:\n        Optional[LevelInDB]: The fetched level, or None if not found.\n    \"\"\"\n    level = level_crud.get_one(db, Level.id == level_id)\n    if level is None:\n        raise HTTPException(\n            status_code=status.HTTP_404_NOT_FOUND,\n            detail=f\"Level with id {level_id} not found\",\n        )\n    return level",
+    "category": "authentication",
+    "difficulty": "intermediate",
+    "tags": [
+      "fastapi",
+      "get",
+      "authentication",
+      "database"
+    ],
+    "source_repo": "JakubPluta/gymhero",
+    "source_file": "gymhero/api/routes/level.py",
+    "complexity_score": 30
+  },
+  {
+    "instruction": "Create a FastAPI GET endpoint with authentication and with database integration",
+    "input": "Include database operations",
+    "output": "@router.get(\n    \"/name/{level_name}\",\n    response_model=Optional[LevelInDB],\n    status_code=status.HTTP_200_OK,\n)\ndef fetch_level_by_name(level_name: str, db: Session = Depends(get_db)):\n    \"\"\"\n    Fetches a level from the database by its name.\n\n    Parameters:\n        level_name (str): The name of the level to fetch.\n        db (Session): The database session.\n\n    Returns:\n        Optional[LevelInDB]: The fetched level, or None if it doesn't exist.\n    \"\"\"\n    level = level_crud.get_one(db, Level.name == level_name)\n    if level is None:\n        raise HTTPException(\n            status_code=status.HTTP_404_NOT_FOUND,\n            detail=f\"Level with name {level_name} not found\",\n        )\n    return level",
+    "category": "authentication",
+    "difficulty": "advanced",
+    "tags": [
+      "fastapi",
+      "get",
+      "authentication",
+      "database"
+    ],
+    "source_repo": "JakubPluta/gymhero",
+    "source_file": "gymhero/api/routes/level.py",
+    "complexity_score": 31
+  },
+  {
+    "instruction": "Create a FastAPI POST endpoint with authentication and with database integration",
+    "input": "Include database operations",
+    "output": "@router.post(\n    \"/\", response_model=Optional[LevelInDB], status_code=status.HTTP_201_CREATED\n)\ndef create_level(\n    level_create: LevelCreate,\n    db: Session = Depends(get_db),\n    user: User = Depends(get_current_superuser),\n):\n    \"\"\"Creates a new level in the database.\n\n    Parameters:\n        level_create (LevelCreate): The data required to create a new level.\n        db (Session): The database session.\n        user (User): The current superuser making the request.\n\n    Returns:\n        Optional[LevelInDB]: The newly created level if successful.\n\n    Raises:\n        HTTPException: If the user is not a superuser or if\n        there is an error creating the level.\n    \"\"\"\n    try:\n        return level_crud.create(db, obj_create=level_create)\n    except IntegrityError as e:\n        raise HTTPException(\n            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,\n            detail=f\"Couldn't create level. Level with name: {level_create.name} already exists\",\n        ) from e\n\n    except Exception as e:  # pragma: no cover\n        raise HTTPException(\n            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,\n            detail=f\"Couldn't create level. Error: {str(e)}\",\n        ) from e  # pragma: no cover",
+    "category": "authentication",
+    "difficulty": "advanced",
+    "tags": [
+      "fastapi",
+      "post",
+      "authentication",
+      "database"
+    ],
+    "source_repo": "JakubPluta/gymhero",
+    "source_file": "gymhero/api/routes/level.py",
+    "complexity_score": 48
+  },
+  {
+    "instruction": "Create a FastAPI DELETE endpoint with authentication and with database integration",
+    "input": "Include database operations",
+    "output": "@router.delete(\"/{level_id}\", response_model=dict, status_code=status.HTTP_200_OK)\ndef delete_level(\n    level_id: int,\n    db: Session = Depends(get_db),\n    user: User = Depends(get_current_superuser),\n):\n    \"\"\"\n    Deletes a level from the database.\n\n    Parameters:\n        level_id (int): The ID of the level to be deleted.\n        db (Session): The database session.\n            Defaults to Depends(get_db).\n        user (User): The current superuser.\n\n    Raises:\n        HTTPException: If the level with the specified ID is not found\n        or the user does not have enough privileges.\n        HTTPException: If there is an error while deleting the level.\n\n    Returns:\n        dict: A dictionary with the detail\n        message indicating that the level was deleted.\n    \"\"\"\n    level = level_crud.get_one(db, Level.id == level_id)\n    if level is None:\n        raise HTTPException(\n            status_code=status.HTTP_404_NOT_FOUND,\n            detail=f\"Level with id {level_id} not found. Cannot delete.\",\n        )\n    try:\n        level_crud.delete(db, level)\n    except Exception as e:\n        raise HTTPException(\n            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,\n            detail=f\"Couldn't delete level with id {level_id}. Error: {str(e)}\",\n        ) from e\n    return {\"detail\": f\"level with id {level_id} deleted.\"}",
+    "category": "authentication",
+    "difficulty": "advanced",
+    "tags": [
+      "fastapi",
+      "delete",
+      "authentication",
+      "database"
+    ],
+    "source_repo": "JakubPluta/gymhero",
+    "source_file": "gymhero/api/routes/level.py",
+    "complexity_score": 50
+  },
+  {
+    "instruction": "Create a FastAPI PUT endpoint with authentication and with database integration",
+    "input": "Include database operations",
+    "output": "@router.put(\n    \"/{level_id}\",\n    response_model=Optional[LevelInDB],\n    status_code=status.HTTP_200_OK,\n)\ndef update_level(\n    level_id: int,\n    level_update: LevelUpdate,\n    db: Session = Depends(get_db),\n    user: User = Depends(get_current_superuser),\n):\n    \"\"\"\n    Update a level in the database.\n\n    Parameters:\n        level_id (int): The ID of the level to be updated.\n        level_update (LevelUpdate): The updated level data.\n        db (Session): The database session.\n        user (User): The current user.\n\n    Returns:\n        Optional[LevelInDB]: The updated level, if successful.\n    \"\"\"\n    level = level_crud.get_one(db, Level.id == level_id)\n    if level is None:\n        raise HTTPException(\n            status_code=status.HTTP_404_NOT_FOUND,\n            detail=f\"Level with id {level_id} not found. Cannot update.\",\n        )\n    try:\n        level = level_crud.update(db, level, level_update)\n    except Exception as e:\n        raise HTTPException(\n            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,\n            detail=f\"Couldn't update level with id {level_id}. Error: {str(e)}\",\n        ) from e\n    return level",
+    "category": "authentication",
+    "difficulty": "advanced",
+    "tags": [
+      "fastapi",
+      "put",
+      "authentication",
+      "database"
+    ],
+    "source_repo": "JakubPluta/gymhero",
+    "source_file": "gymhero/api/routes/level.py",
+    "complexity_score": 50
+  },
+  {
+    "instruction": "Create a FastAPI GET endpoint with authentication and with database integration",
+    "input": "Include database operations",
+    "output": "@router.get(\n    \"/all\",\n    response_model=List[Optional[TrainingPlanInDB]],\n    status_code=status.HTTP_200_OK,\n)\ndef get_all_training_plans(\n    db: Session = Depends(get_db),\n    pagination_params: dict = Depends(get_pagination_params),\n    user: User = Depends(get_current_superuser),\n):\n    \"\"\"\n    Retrieves all training plans with pagination.\n\n    Parameters:\n        db (Session): The database session.\n        pagination_params (dict): A dictionary containing the pagination parameters.\n\n    Returns:\n        List[Optional[TrainingPlanInDB]]: A list of\n        training plans retrieved from the database.\n    \"\"\"\n    skip, limit = pagination_params\n    return training_plan_crud.get_many(db, skip=skip, limit=limit)",
+    "category": "authentication",
+    "difficulty": "intermediate",
+    "tags": [
+      "fastapi",
+      "get",
+      "authentication",
+      "database"
+    ],
+    "source_repo": "JakubPluta/gymhero",
+    "source_file": "gymhero/api/routes/training_plan.py",
+    "complexity_score": 29
+  },
+  {
+    "instruction": "Create a FastAPI GET endpoint with authentication and with database integration",
+    "input": "Include database operations",
+    "output": "@router.get(\n    \"/all/my\",\n    response_model=List[Optional[TrainingPlanInDB]],\n    status_code=status.HTTP_200_OK,\n)\ndef get_all_training_plans_for_owner(\n    db: Session = Depends(get_db),\n    pagination_params: dict = Depends(get_pagination_params),\n    user: User = Depends(get_current_active_user),\n):\n    \"\"\"\n    Retrieve all training plans for the owner.\n\n    Parameters:\n        db (Session): The database session.\n        pagination_params (dict): The pagination parameters.\n        user (User): The current active user.\n\n    Returns:\n        List[Optional[TrainingPlanInDB]]: A list of training plans owned by the user.\n    \"\"\"\n    skip, limit = pagination_params\n    return training_plan_crud.get_many_for_owner(\n        db, skip=skip, limit=limit, owner_id=user.id\n    )",
+    "category": "authentication",
+    "difficulty": "advanced",
+    "tags": [
+      "fastapi",
+      "get",
+      "authentication",
+      "database"
+    ],
+    "source_repo": "JakubPluta/gymhero",
+    "source_file": "gymhero/api/routes/training_plan.py",
+    "complexity_score": 31
+  },
+  {
+    "instruction": "Create a FastAPI GET endpoint with authentication and with database integration",
+    "input": "Include database operations",
+    "output": "@router.get(\n    \"/{training_plan_id}\",\n    response_model=Optional[TrainingPlanInDB],\n    status_code=status.HTTP_200_OK,\n)\ndef get_training_plan_by_id(\n    training_plan_id: int,\n    db: Session = Depends(get_db),\n    user: User = Depends(get_current_active_user),\n):\n    \"\"\"\n    Retrieves a training plan from the database by its ID.\n\n    Parameters:\n        training_plan_id (int): The ID of the training plan to retrieve.\n        db (Session): The database session.\n\n    Returns:\n        Optional[TrainingPlanInDB]: The retrieved training plan, or None if not found.\n\n    Raises:\n        HTTPException: If the training plan with the specified ID is not found.\n\n    \"\"\"\n    if user.is_superuser:\n        training_plan = training_plan_crud.get_one(\n            db, TrainingPlan.id == training_plan_id\n        )\n    else:\n        training_plan = training_plan_crud.get_one(\n            db, TrainingPlan.id == training_plan_id, owner_id=user.id\n        )\n\n    if training_plan is None:\n        raise HTTPException(\n            status_code=status.HTTP_404_NOT_FOUND,\n            detail=f\"Training plan with id {training_plan_id} not found\",\n        )\n    return training_plan",
+    "category": "authentication",
+    "difficulty": "advanced",
+    "tags": [
+      "fastapi",
+      "get",
+      "authentication",
+      "database"
+    ],
+    "source_repo": "JakubPluta/gymhero",
+    "source_file": "gymhero/api/routes/training_plan.py",
+    "complexity_score": 47
+  },
+  {
+    "instruction": "Create a FastAPI GET endpoint with authentication and with database integration",
+    "input": "Include database operations",
+    "output": "@router.get(\n    \"/name/{training_plan_name}\",\n    response_model=Optional[TrainingPlanInDB],\n    status_code=status.HTTP_200_OK,\n)\ndef get_training_plan_by_name(\n    training_plan_name: str,\n    db: Session = Depends(get_db),\n    user: User = Depends(get_current_active_user),\n):\n    \"\"\"\n    Get a training plan by its name.\n\n    Parameters:\n        training_plan_name (str): The name of the training plan.\n        db (Session): The database session.\n\n    Returns:\n        Optional[TrainingPlanInDB]: The training plan with the specified name,\n        if found. Otherwise, None.\n\n    Raises:\n        HTTPException: If the training plan with the specified name is not found.\n\n    \"\"\"\n\n    training_plan = training_plan_crud.get_one(\n        db, TrainingPlan.name == training_plan_name, owner_id=user.id\n    )\n    if training_plan is None:\n        raise HTTPException(\n            status_code=status.HTTP_404_NOT_FOUND,\n            detail=f\"Training plan with name {training_plan_name} not found\",\n        )\n    return training_plan",
+    "category": "authentication",
+    "difficulty": "advanced",
+    "tags": [
+      "fastapi",
+      "get",
+      "authentication",
+      "database"
+    ],
+    "source_repo": "JakubPluta/gymhero",
+    "source_file": "gymhero/api/routes/training_plan.py",
+    "complexity_score": 43
+  },
+  {
+    "instruction": "Create a FastAPI GET endpoint with authentication and with database integration",
+    "input": "Include database operations",
+    "output": "@router.get(\n    \"/name/{training_plan_name}/superuser\",\n    response_model=List[Optional[TrainingPlanInDB]],\n    status_code=status.HTTP_200_OK,\n    include_in_schema=False,\n)\ndef get_training_plans_by_name_for_super_user(\n    training_plan_name: str,\n    db: Session = Depends(get_db),\n    user: User = Depends(get_current_superuser),\n):\n    \"\"\"\n    Get a training plan by name for a super user.\n\n    Parameters:\n        training_plan_name (str): The name of the training plan.\n        db (Session, optional): The database session. Defaults to Depends(get_db).\n        user (User, optional): The current superuser. Defaults to Depends(get_current_superuser).\n\n    Returns:\n        Optional[TrainingPlanInDB]: The training plan with the specified name, if found.\n\n\n    \"\"\"\n    training_plan = training_plan_crud.get_many(\n        db, TrainingPlan.name == training_plan_name\n    )\n    return training_plan",
+    "category": "authentication",
+    "difficulty": "advanced",
+    "tags": [
+      "fastapi",
+      "get",
+      "authentication",
+      "database"
+    ],
+    "source_repo": "JakubPluta/gymhero",
+    "source_file": "gymhero/api/routes/training_plan.py",
+    "complexity_score": 34
+  },
+  {
+    "instruction": "Create a FastAPI POST endpoint with authentication and with database integration",
+    "input": "Include database operations",
+    "output": "@router.post(\n    \"/\", response_model=Optional[TrainingPlanInDB], status_code=status.HTTP_201_CREATED\n)\ndef create_training_plan(\n    training_plan_create: TrainingPlanCreate,\n    db: Session = Depends(get_db),\n    user: User = Depends(get_current_active_user),\n):\n    \"\"\"\n    Create a new training plan with the specified data.\n\n    Parameters:\n        training_plan_create (TrainingPlanCreate):\n            The data for creating the training plan.\n        db (Session, optional): The database session.\n            Defaults to Depends(get_db).\n        user (User, optional): The current authenticated user.\n\n    Returns:\n        Optional[TrainingPlanInDB]: The created training plan.\n\n    Raises:\n        HTTPException: If there is an error creating the training plan.\n    \"\"\"\n    training_plan = training_plan_crud.get_one(\n        db, TrainingPlan.name == training_plan_create.name, owner_id=user.id\n    )\n    if training_plan is not None:\n        raise HTTPException(\n            status_code=status.HTTP_409_CONFLICT,\n            detail=f\"Training plan with name {training_plan_create.name} already exists\",\n        )\n    return training_plan_crud.create_with_owner(\n        db, obj_create=training_plan_create, owner_id=user.id\n    )",
+    "category": "authentication",
+    "difficulty": "advanced",
+    "tags": [
+      "fastapi",
+      "post",
+      "authentication",
+      "database"
+    ],
+    "source_repo": "JakubPluta/gymhero",
+    "source_file": "gymhero/api/routes/training_plan.py",
+    "complexity_score": 43
+  },
+  {
+    "instruction": "Create a FastAPI DELETE endpoint with authentication and with database integration",
+    "input": "Include database operations",
+    "output": "@router.delete(\n    \"/{training_plan_id}\", response_model=dict, status_code=status.HTTP_200_OK\n)\ndef delete_training_plan(\n    training_plan_id: int,\n    db: Session = Depends(get_db),\n    user: User = Depends(get_current_active_user),\n):\n    \"\"\"\n    Deletes a training plan with the given `training_plan_id`.\n\n    Parameters:\n        training_plan_id (int): The ID of the training plan to be deleted.\n        db (Session, optional): The database session.\n        user (User, optional): The current active user.\n\n    Raises:\n        HTTPException: If the training plan is not found\n            or the user does not have enough privileges.\n        Exception: If there is an error while deleting the training plan.\n\n    Returns:\n        None\n    \"\"\"\n    training_plan: TrainingPlan = training_plan_crud.get_one(\n        db, TrainingPlan.id == training_plan_id\n    )\n    if training_plan is None:\n        raise HTTPException(\n            status_code=status.HTTP_404_NOT_FOUND,\n            detail=f\"Training plan with id {training_plan_id} not found. \\\n            Cannot delete.\",\n        )\n    if training_plan.owner_id != user.id and not user.is_superuser:\n        raise HTTPException(\n            status_code=status.HTTP_403_FORBIDDEN,\n            detail=\"The user does not have enough privileges\",\n        )\n    try:\n        training_plan_crud.delete(db, training_plan)\n    except Exception as e:  # pragma: no cover\n        raise HTTPException(\n            status_code=status.HTTP_400_BAD_REQUEST,\n            detail=str(e),\n        ) from e  # pragma: no cover\n    return {\"detail\": \"Training plan with id {training_plan_id} deleted\"}",
+    "category": "authentication",
+    "difficulty": "advanced",
+    "tags": [
+      "fastapi",
+      "delete",
+      "authentication",
+      "database"
+    ],
+    "source_repo": "JakubPluta/gymhero",
+    "source_file": "gymhero/api/routes/training_plan.py",
+    "complexity_score": 50
+  },
+  {
+    "instruction": "Create a FastAPI PUT endpoint with authentication and with database integration",
+    "input": "Include database operations",
+    "output": "@router.put(\n    \"/{training_plan_id}\",\n    response_model=Optional[TrainingPlanInDB],\n    status_code=status.HTTP_200_OK,\n)\ndef update_training_plan(\n    training_plan_id: int,\n    training_plan_update: TrainingPlanUpdate,\n    db: Session = Depends(get_db),\n    user: User = Depends(get_current_active_user),\n):\n    \"\"\"\n    Update a training plan with the given ID.\n\n    Parameters:\n        training_plan_id (int): The ID of the training plan to update.\n        training_plan_update (TrainingPlanUpdate): The updated training plan data.\n        db (Session, optional): The database session. Defaults to Depends(get_db).\n        user (User, optional): The current user.\n\n    Returns:\n        Optional[TrainingPlanInDB]: The updated training plan.\n\n    Raises:\n        HTTPException 404: If the training plan with the given ID is not found.\n        HTTPException 403: If the user does not have sufficient privileges.\n    \"\"\"\n    training_plan: TrainingPlan = training_plan_crud.get_one(\n        db, TrainingPlan.id == training_plan_id\n    )\n    if training_plan is None:\n        raise HTTPException(\n            status_code=status.HTTP_404_NOT_FOUND,\n            detail=f\"Training plan with id {training_plan_id} not found. \\\n            Cannot update.\",\n        )\n    if training_plan.owner_id != user.id and not user.is_superuser:\n        raise HTTPException(\n            status_code=status.HTTP_403_FORBIDDEN,\n            detail=\"The user does not have enough privileges\",\n        )\n    return training_plan_crud.update(\n        db, db_obj=training_plan, obj_update=training_plan_update\n    )",
+    "category": "authentication",
+    "difficulty": "advanced",
+    "tags": [
+      "fastapi",
+      "put",
+      "authentication",
+      "database"
+    ],
+    "source_repo": "JakubPluta/gymhero",
+    "source_file": "gymhero/api/routes/training_plan.py",
+    "complexity_score": 50
+  },
+  {
+    "instruction": "Create a FastAPI PUT endpoint with authentication and with database integration",
+    "input": "Include database operations",
+    "output": "@router.put(\n    \"/{training_plan_id}/training-units/{training_unit_id}/add\",\n    response_model=Optional[TrainingPlanInDB],\n    status_code=status.HTTP_200_OK,\n)\ndef add_training_unit_to_training_plan(\n    training_plan_id: int,\n    training_unit_id: int,\n    db: Session = Depends(get_db),\n    user: User = Depends(get_current_active_user),\n):\n    \"\"\"\n    Add a training unit to a training plan.\n\n    Parameters:\n        training_plan_id (int): The ID of the training plan to add the training unit to.\n        training_unit_id (int): The ID of the training unit to add to the training plan.\n        db (Session, optional): The database session. Defaults to Depends(get_db).\n        user (User, optional): The current user.\n\n    Returns:\n        None\n\n    Raises:\n        HTTPException 404: If the training plan or\n            training unit with the given IDs are not found.\n        HTTPException 403: If the user does not have sufficient privileges.\n    \"\"\"\n    training_plan: TrainingPlan = training_plan_crud.get_one(\n        db, TrainingPlan.id == training_plan_id\n    )\n    if training_plan is None:\n        raise HTTPException(\n            status_code=status.HTTP_404_NOT_FOUND,\n            detail=f\"Training plan with id {training_plan_id} not found. \\\n            Cannot update.\",\n        )\n    training_unit = training_unit_crud.get_one(db, TrainingUnit.id == training_unit_id)\n    if training_unit is None:\n        raise HTTPException(\n            status_code=status.HTTP_404_NOT_FOUND,\n            detail=f\"Training unit with id {training_unit_id} not found. \\\n            Cannot update.\",\n        )\n    if training_plan.owner_id != user.id and not user.is_superuser:\n        raise HTTPException(\n            status_code=status.HTTP_403_FORBIDDEN,\n            detail=\"The user does not have enough privileges\",\n        )\n    training_plan = training_plan_crud.add_training_unit_to_training_plan(\n        db, training_plan=training_plan, training_unit=training_unit\n    )\n    if training_plan is None:\n        raise HTTPException(\n            status_code=status.HTTP_409_CONFLICT,\n            detail=f\"Training unit with id {training_unit_id} already exists in training plan with id {training_plan_id}\",\n        )\n    return training_plan",
+    "category": "authentication",
+    "difficulty": "advanced",
+    "tags": [
+      "fastapi",
+      "put",
+      "authentication",
+      "database"
+    ],
+    "source_repo": "JakubPluta/gymhero",
+    "source_file": "gymhero/api/routes/training_plan.py",
+    "complexity_score": 50
+  },
+  {
+    "instruction": "Create a FastAPI PUT endpoint with authentication and with database integration",
+    "input": "Include database operations",
+    "output": "@router.put(\n    \"/{training_plan_id}/training-units/{training_unit_id}/remove\",\n    response_model=Optional[TrainingPlanInDB],\n    status_code=status.HTTP_200_OK,\n)\ndef remove_training_unit_from_training_plan(\n    training_plan_id: int,\n    training_unit_id: int,\n    db: Session = Depends(get_db),\n    user: User = Depends(get_current_active_user),\n):\n    \"\"\"\n    Remove a training unit from a training plan.\n\n    Parameters:\n        training_plan_id (int): The ID of the training plan to\n        remove the training unit from.\n        training_unit_id (int): The ID of the training unit to\n        remove from the training plan.\n        db (Session, optional): The database session. Defaults to Depends(get_db).\n        user (User, optional): The current user.\n\n    Returns:\n        None\n\n    Raises:\n        HTTPException 404: If the training plan or training unit\n        with the given IDs are not found.\n        HTTPException 403: If the user does not have sufficient privileges.\n    \"\"\"\n    training_plan: TrainingPlan = training_plan_crud.get_one(\n        db, TrainingPlan.id == training_plan_id\n    )\n    if training_plan is None:\n        raise HTTPException(\n            status_code=status.HTTP_404_NOT_FOUND,\n            detail=f\"Training plan with id {training_plan_id} not found. \\\n            Cannot update.\",\n        )\n\n    if training_plan.owner_id != user.id and not user.is_superuser:\n        raise HTTPException(\n            status_code=status.HTTP_403_FORBIDDEN,\n            detail=\"The user does not have enough privileges\",\n        )\n\n    training_unit = training_unit_crud.get_one(db, TrainingUnit.id == training_unit_id)\n    if training_unit is None:\n        raise HTTPException(\n            status_code=status.HTTP_404_NOT_FOUND,\n            detail=f\"Training unit with id {training_unit_id} not found. \\\n            Cannot update.\",\n        )\n\n    training_plan = training_plan_crud.remove_training_unit_from_training_plan(\n        db, training_plan=training_plan, training_unit=training_unit\n    )\n    if training_plan is None:\n        raise HTTPException(\n            status_code=status.HTTP_409_CONFLICT,\n            detail=f\"Training unit with id {training_unit_id} does not exist in training plan with id {training_plan_id}\",\n        )\n    return training_plan",
+    "category": "authentication",
+    "difficulty": "advanced",
+    "tags": [
+      "fastapi",
+      "put",
+      "authentication",
+      "database"
+    ],
+    "source_repo": "JakubPluta/gymhero",
+    "source_file": "gymhero/api/routes/training_plan.py",
+    "complexity_score": 50
+  },
+  {
+    "instruction": "Create a FastAPI GET endpoint with authentication and with database integration",
+    "input": "Include database operations",
+    "output": "@router.get(\n    \"/{training_plan_id}/training-units\",\n    response_model=List[TrainingUnitInDB],\n    status_code=status.HTTP_200_OK,\n)\ndef get_training_units_in_training_plan(\n    training_plan_id: int,\n    db: Session = Depends(get_db),\n    user: User = Depends(get_current_active_user),\n):\n    \"\"\"\n    Get all training units in a training plan.\n\n    Parameters:\n        training_plan_id (int): The ID of the training plan\n        to get the training units from.\n        db (Session, optional): The database session. Defaults to Depends(get_db).\n        user (User, optional): The current user.\n\n    Returns:\n        List[TrainingUnit]: A list of training units in the training plan.\n\n    Raises:\n        HTTPException 404: If the training plan with the given ID is not found.\n        HTTPException 403: If the user does not have sufficient privileges.\n    \"\"\"\n    training_plan: TrainingPlan = training_plan_crud.get_one(\n        db, TrainingPlan.id == training_plan_id\n    )\n    if training_plan is None:\n        raise HTTPException(\n            status_code=status.HTTP_404_NOT_FOUND,\n            detail=f\"Training plan with id {training_plan_id} not found. \",\n        )\n    if training_plan.owner_id != user.id and not user.is_superuser:\n        raise HTTPException(\n            status_code=status.HTTP_403_FORBIDDEN,\n            detail=\"The user does not have enough privileges\",\n        )\n\n    return training_plan.training_units",
+    "category": "authentication",
+    "difficulty": "advanced",
+    "tags": [
+      "fastapi",
+      "get",
+      "authentication",
+      "database"
+    ],
+    "source_repo": "JakubPluta/gymhero",
+    "source_file": "gymhero/api/routes/training_plan.py",
+    "complexity_score": 49
+  },
+  {
+    "instruction": "Create a FastAPI GET endpoint with authentication and with database integration",
+    "input": "Include database operations",
+    "output": "@router.get(\n    \"/all\",\n    response_model=List[Optional[TrainingUnitInDB]],\n    status_code=status.HTTP_200_OK,\n)\ndef get_all_training_units(\n    db: Session = Depends(get_db),\n    pagination_params: dict = Depends(get_pagination_params),\n    user: User = Depends(get_current_superuser),\n):\n    \"\"\"\n    Retrieves all training units with pagination.\n\n    Parameters:\n        db (Session): The database session.\n        pagination_params (dict): The pagination parameters.\n\n    Returns:\n        TrainingUnitsInDB: The training units retrieved from the database.\n    \"\"\"\n    skip, limit = pagination_params\n    return training_unit_crud.get_many(db, skip=skip, limit=limit)",
+    "category": "authentication",
+    "difficulty": "intermediate",
+    "tags": [
+      "fastapi",
+      "get",
+      "authentication",
+      "database"
+    ],
+    "source_repo": "JakubPluta/gymhero",
+    "source_file": "gymhero/api/routes/training_unit.py",
+    "complexity_score": 28
+  },
+  {
+    "instruction": "Create a FastAPI GET endpoint with authentication and with database integration",
+    "input": "Include database operations",
+    "output": "@router.get(\n    \"/all/my\",\n    response_model=List[Optional[TrainingUnitInDB]],\n    status_code=status.HTTP_200_OK,\n)\ndef get_all_training_units_for_owner(\n    db: Session = Depends(get_db),\n    pagination_params: dict = Depends(get_pagination_params),\n    user: User = Depends(get_current_active_user),\n):\n    \"\"\"\n    Retrieves all training units for the current user with pagination.\n\n    Parameters:\n        db (Session): The database session.\n        pagination_params (dict): The pagination parameters.\n        user (User): The current active user.\n\n    Returns:\n        TrainingUnitsInDB: The training units retrieved from the database.\n    \"\"\"\n    skip, limit = pagination_params\n    return training_unit_crud.get_many_for_owner(\n        db, owner_id=user.id, skip=skip, limit=limit\n    )",
+    "category": "authentication",
+    "difficulty": "advanced",
+    "tags": [
+      "fastapi",
+      "get",
+      "authentication",
+      "database"
+    ],
+    "source_repo": "JakubPluta/gymhero",
+    "source_file": "gymhero/api/routes/training_unit.py",
+    "complexity_score": 31
+  },
+  {
+    "instruction": "Create a FastAPI GET endpoint with authentication and with database integration",
+    "input": "Include database operations",
+    "output": "@router.get(\n    \"/{training_unit_id}\",\n    response_model=Optional[TrainingUnitInDB],\n    status_code=status.HTTP_200_OK,\n)\ndef get_training_unit_by_id(\n    training_unit_id: int,\n    db: Session = Depends(get_db),\n    user: User = Depends(get_current_active_user),\n):\n    \"\"\"\n    Retrieves a training unit by ID.\n\n    Parameters:\n        training_unit_id (int): The ID of the training unit.\n        db (Session): The database session.\n\n    Returns:\n        Optional[TrainingUnitInDB]: The training unit retrieved\n        from the database, or None if not found.\n    \"\"\"\n    if user.is_superuser:\n        training_unit = training_unit_crud.get_one(\n            db, TrainingUnit.id == training_unit_id\n        )\n    else:\n        training_unit = training_unit_crud.get_one(\n            db, TrainingUnit.id == training_unit_id, owner_id=user.id\n        )\n    if training_unit is None:\n        raise HTTPException(\n            status_code=status.HTTP_404_NOT_FOUND,\n            detail=f\"Training unit with id {training_unit_id} not found\",\n        )\n    return training_unit",
+    "category": "authentication",
+    "difficulty": "advanced",
+    "tags": [
+      "fastapi",
+      "get",
+      "authentication",
+      "database"
+    ],
+    "source_repo": "JakubPluta/gymhero",
+    "source_file": "gymhero/api/routes/training_unit.py",
+    "complexity_score": 43
+  },
+  {
+    "instruction": "Create a FastAPI GET endpoint with authentication and with database integration",
+    "input": "Include database operations",
+    "output": "@router.get(\n    \"/name/{training_unit_name}\",\n    response_model=Optional[TrainingUnitInDB],\n    status_code=status.HTTP_200_OK,\n)\ndef get_training_unit_by_name(\n    training_unit_name: str,\n    db: Session = Depends(get_db),\n    user: User = Depends(get_current_active_user),\n):\n    \"\"\"\n    Retrieves a training unit by name.\n\n    Parameters:\n        training_unit_name (str): The name of the training unit.\n        db (Session): The database session.\n\n    Returns:\n        Optional[TrainingUnitInDB]: The training unit retrieved\n        from the database, or None if not found.\n    \"\"\"\n\n    training_unit = training_unit_crud.get_one(\n        db, TrainingUnit.name == training_unit_name, owner_id=user.id\n    )\n    if training_unit is None:\n        raise HTTPException(\n            status_code=status.HTTP_404_NOT_FOUND,\n            detail=f\"Training unit with name {training_unit_name} not found for user {user.id}\",\n        )\n    return training_unit",
+    "category": "authentication",
+    "difficulty": "advanced",
+    "tags": [
+      "fastapi",
+      "get",
+      "authentication",
+      "database"
+    ],
+    "source_repo": "JakubPluta/gymhero",
+    "source_file": "gymhero/api/routes/training_unit.py",
+    "complexity_score": 39
+  },
+  {
+    "instruction": "Create a FastAPI GET endpoint with authentication and with database integration",
+    "input": "Include database operations",
+    "output": "@router.get(\n    \"/name/{training_unit_name}/superuser\",\n    response_model=List[Optional[TrainingUnitInDB]],\n    status_code=status.HTTP_200_OK,\n    include_in_schema=False,\n)\ndef get_training_units_by_name(\n    training_unit_name: str,\n    db: Session = Depends(get_db),\n    user: User = Depends(get_current_superuser),\n):\n    \"\"\"\n    Retrieves a training units by name.\n\n    Parameters:\n        training_unit_name (str): The name of the training unit.\n        db (Session): The database session.\n\n    Returns:\n        List[Optional[TrainingUnitInDB]]: The training unit retrieved\n        from the database, or None if not found.\n    \"\"\"\n\n    training_unit = training_unit_crud.get_many(\n        db, TrainingUnit.name == training_unit_name\n    )\n    if training_unit is None:\n        raise HTTPException(\n            status_code=status.HTTP_404_NOT_FOUND,\n            detail=f\"Training unit with name {training_unit_name} not found for user {user.id}\",\n        )\n    return training_unit",
+    "category": "authentication",
+    "difficulty": "advanced",
+    "tags": [
+      "fastapi",
+      "get",
+      "authentication",
+      "database"
+    ],
+    "source_repo": "JakubPluta/gymhero",
+    "source_file": "gymhero/api/routes/training_unit.py",
+    "complexity_score": 40
+  },
+  {
+    "instruction": "Create a FastAPI POST endpoint with authentication and with database integration",
+    "input": "Include database operations",
+    "output": "@router.post(\"/\", response_model=TrainingUnitInDB, status_code=status.HTTP_201_CREATED)\ndef create_training_unit(\n    training_unit_in: TrainingUnitCreate,\n    db: Session = Depends(get_db),\n    user: User = Depends(get_current_active_user),\n):\n    \"\"\"\n    Creates a new training unit.\n\n    Parameters:\n        training_unit_in (TrainingUnitCreate): The training unit data.\n        db (Session): The database session.\n\n    Returns:\n        TrainingUnitInDB: The created training unit.\n    \"\"\"\n    training_unit = training_unit_crud.get_one(\n        db, TrainingUnit.name == training_unit_in.name, owner_id=user.id\n    )\n    if training_unit is not None:\n        raise HTTPException(\n            status_code=status.HTTP_409_CONFLICT,\n            detail=f\"Training unit with name {training_unit_in.name} already exists for user {user.id}\",\n        )\n\n    training_unit = training_unit_crud.create_with_owner(\n        db, training_unit_in, owner_id=user.id\n    )\n\n    return training_unit",
+    "category": "authentication",
+    "difficulty": "advanced",
+    "tags": [
+      "fastapi",
+      "post",
+      "authentication",
+      "database"
+    ],
+    "source_repo": "JakubPluta/gymhero",
+    "source_file": "gymhero/api/routes/training_unit.py",
+    "complexity_score": 38
+  },
+  {
+    "instruction": "Create a FastAPI PUT endpoint with authentication and with database integration",
+    "input": "Include database operations",
+    "output": "@router.put(\n    \"/{training_unit_id}\",\n    response_model=TrainingUnitInDB,\n    status_code=status.HTTP_200_OK,\n)\ndef update_training_unit(\n    training_unit_id: int,\n    training_unit_update: TrainingUnitUpdate,\n    db: Session = Depends(get_db),\n    user: User = Depends(get_current_active_user),\n):\n    \"\"\"\n    Updates a training unit.\n\n    Parameters:\n        training_unit_id (int): The ID of the training unit to update.\n        training_unit_update (TrainingUnitUpdate): The updated training unit data.\n        db (Session): The database session.\n\n    Returns:\n        TrainingUnitInDB: The updated training unit.\n    \"\"\"\n    training_unit: TrainingUnit = training_unit_crud.get_one(\n        db, TrainingUnit.id == training_unit_id\n    )\n    if training_unit is None:\n        raise HTTPException(\n            status_code=status.HTTP_404_NOT_FOUND,\n            detail=f\"Training unit with id {training_unit_id} not found\",\n        )\n\n    if training_unit.owner_id != user.id and not user.is_superuser:\n        raise HTTPException(\n            status_code=status.HTTP_403_FORBIDDEN,\n            detail=\"You do not have permission to perform this action\",\n        )\n\n    try:\n        training_unit = training_unit_crud.update(\n            db, training_unit, training_unit_update\n        )\n    except Exception as e:  # pragma: no cover\n        raise HTTPException(\n            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,\n            detail=\"Could not update training unit. Error: \" + str(e),\n        ) from e\n    return training_unit",
+    "category": "authentication",
+    "difficulty": "advanced",
+    "tags": [
+      "fastapi",
+      "put",
+      "authentication",
+      "database"
+    ],
+    "source_repo": "JakubPluta/gymhero",
+    "source_file": "gymhero/api/routes/training_unit.py",
+    "complexity_score": 50
+  },
+  {
+    "instruction": "Create a FastAPI DELETE endpoint with authentication and with database integration",
+    "input": "Include database operations",
+    "output": "@router.delete(\"/{training_unit_id}\", status_code=status.HTTP_200_OK)\ndef delete_training_unit(\n    training_unit_id: int,\n    db: Session = Depends(get_db),\n    user: User = Depends(get_current_active_user),\n):\n    \"\"\"\n    Deletes a training unit.\n\n    Parameters:\n        training_unit_id (int): The ID of the training unit to delete.\n        db (Session): The database session.\n\n    Returns:\n        Dict[str, str]: A message indicating that the training unit has been deleted.\n    \"\"\"\n    training_unit: TrainingUnit = training_unit_crud.get_one(\n        db, TrainingUnit.id == training_unit_id\n    )\n    if training_unit is None:\n        raise HTTPException(\n            status_code=status.HTTP_404_NOT_FOUND,\n            detail=f\"Training unit with id {training_unit_id} not found\",\n        )\n\n    if training_unit.owner_id != user.id and not user.is_superuser:\n        raise HTTPException(\n            status_code=status.HTTP_403_FORBIDDEN,\n            detail=\"You do not have permission to perform this action\",\n        )\n\n    try:\n        training_unit_crud.delete(db, training_unit)\n    except Exception as e:  # pragma: no cover\n        raise HTTPException(\n            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,\n            detail=\"Could not delete training unit. Error: \" + str(e),\n        ) from e  # pragma: no cover\n    return {\"detail\": f\"Training unit type with id {training_unit_id} deleted.\"}",
+    "category": "authentication",
+    "difficulty": "advanced",
+    "tags": [
+      "fastapi",
+      "delete",
+      "authentication",
+      "database"
+    ],
+    "source_repo": "JakubPluta/gymhero",
+    "source_file": "gymhero/api/routes/training_unit.py",
+    "complexity_score": 50
+  },
+  {
+    "instruction": "Create a FastAPI PUT endpoint with authentication and with database integration",
+    "input": "Include database operations",
+    "output": "@router.put(\n    \"/{training_unit_id}/exercises/{exercise_id}/add\",\n    response_model=Optional[TrainingUnitInDB],\n    status_code=status.HTTP_200_OK,\n)\ndef add_exercise_to_training_unit(\n    training_unit_id: int,\n    exercise_id: int,\n    db: Session = Depends(get_db),\n    user: User = Depends(get_current_active_user),\n):\n    \"\"\"\n    Adds an exercise to a training unit.\n\n    Parameters:\n        training_unit_id (int): The ID of the training unit.\n        exercise_id (int): The ID of the exercise.\n        db (Session, optional): The database session. Defaults to Depends(get_db).\n        user (User, optional): The current authenticated user.\n            Defaults to Depends(get_current_active_user).\n\n    Returns:\n        The updated training unit with the added exercise.\n    \"\"\"\n    training_unit = training_unit_crud.get_one(db, TrainingUnit.id == training_unit_id)\n    if training_unit is None:\n        raise HTTPException(\n            status_code=status.HTTP_404_NOT_FOUND,\n            detail=f\"Training unit with id {training_unit_id} not found\",\n        )\n\n    exercise = exercise_crud.get_one(db, Exercise.id == exercise_id)\n    if exercise is None:\n        raise HTTPException(\n            status_code=status.HTTP_404_NOT_FOUND,\n            detail=f\"Exercise with id {exercise_id} not found\",\n        )\n\n    if training_unit.owner_id != user.id and not user.is_superuser:\n        raise HTTPException(\n            status_code=status.HTTP_403_FORBIDDEN,\n            detail=\"You do not have permission to perform this action\",\n        )\n\n    training_unit = training_unit_crud.add_exercise_to_training_unit(\n        db, training_unit, exercise\n    )\n    if training_unit is None:\n        raise HTTPException(\n            status_code=status.HTTP_409_CONFLICT,\n            detail=f\"Exercise with id {exercise_id} already exists in training unit with id {training_unit_id}\",\n        )\n    return training_unit",
+    "category": "authentication",
+    "difficulty": "advanced",
+    "tags": [
+      "fastapi",
+      "put",
+      "authentication",
+      "database"
+    ],
+    "source_repo": "JakubPluta/gymhero",
+    "source_file": "gymhero/api/routes/training_unit.py",
+    "complexity_score": 50
+  },
+  {
+    "instruction": "Create a FastAPI GET endpoint with authentication and with database integration",
+    "input": "Include database operations",
+    "output": "@router.get(\n    \"/{training_unit_id}/exercises\", response_model=List[Optional[ExerciseInDB]]\n)\ndef get_exercises_in_training_unit(\n    training_unit_id: int,\n    db: Session = Depends(get_db),\n    user: User = Depends(get_current_active_user),\n):\n    \"\"\"\n    Retrieve all exercises within a given training unit.\n\n    Parameters:\n        training_unit_id (int): The ID of the training unit.\n        db (Session): The database session.\n        user (User): The current active user.\n\n    Returns:\n        List[Exercise]: A list of exercises within the training unit.\n\n    Raises:\n        HTTPException: If the training unit is\n        not found or the user does not have permission.\n    \"\"\"\n    training_unit = training_unit_crud.get_one(db, TrainingUnit.id == training_unit_id)\n    if training_unit is None:\n        raise HTTPException(\n            status_code=status.HTTP_404_NOT_FOUND,\n            detail=f\"Training unit with id {training_unit_id} not found\",\n        )\n\n    if training_unit.owner_id != user.id and not user.is_superuser:\n        raise HTTPException(\n            status_code=status.HTTP_403_FORBIDDEN,\n            detail=\"You do not have permission to perform this action\",\n        )\n\n    return training_unit_crud.get_exercises_in_training_unit(training_unit)",
+    "category": "authentication",
+    "difficulty": "advanced",
+    "tags": [
+      "fastapi",
+      "get",
+      "authentication",
+      "database"
+    ],
+    "source_repo": "JakubPluta/gymhero",
+    "source_file": "gymhero/api/routes/training_unit.py",
+    "complexity_score": 45
+  },
+  {
+    "instruction": "Create a FastAPI PUT endpoint with authentication and with database integration",
+    "input": "Include database operations",
+    "output": "@router.put(\n    \"/{training_unit_id}/exercises/{exercise_id}/remove\",\n    response_model=Optional[TrainingUnitInDB],\n    status_code=status.HTTP_200_OK,\n)\ndef remove_exercise_from_training_unit(\n    training_unit_id: int,\n    exercise_id: int,\n    db: Session = Depends(get_db),\n    user: User = Depends(get_current_active_user),\n):\n    \"\"\"\n    Remove an exercise from a training unit.\n\n    Parameters:\n        training_unit_id (int): The ID of the training unit.\n        exercise_id (int): The ID of the exercise.\n        db (Session, optional): The database session.\n            Defaults to Depends(get_db).\n        user (User, optional): The current user.\n            Defaults to Depends(get_current_active_user).\n\n    Returns:\n        The updated training unit after removing the exercise.\n\n    Raises:\n        HTTPException: If the training unit or exercise is not found,\n        or if the user does not have permission.\n    \"\"\"\n    training_unit = training_unit_crud.get_one(db, TrainingUnit.id == training_unit_id)\n    if training_unit is None:\n        raise HTTPException(\n            status_code=status.HTTP_404_NOT_FOUND,\n            detail=f\"Training unit with id {training_unit_id} not found\",\n        )\n\n    exercise = exercise_crud.get_one(db, Exercise.id == exercise_id)\n    if exercise is None:\n        raise HTTPException(\n            status_code=status.HTTP_404_NOT_FOUND,\n            detail=f\"Exercise with id {exercise_id} not found\",\n        )\n\n    if training_unit.owner_id != user.id and not user.is_superuser:\n        raise HTTPException(\n            status_code=status.HTTP_403_FORBIDDEN,\n            detail=\"You do not have permission to perform this action\",\n        )\n\n    try:\n        training_unit_crud.remove_exercise_from_training_unit(\n            db, training_unit, exercise\n        )\n    except Exception as e:\n        raise HTTPException(\n            status_code=status.HTTP_409_CONFLICT,\n            detail=f\"Exercise with id {exercise_id} not found in training unit with id {training_unit_id}\",\n        ) from e\n    return training_unit",
+    "category": "authentication",
+    "difficulty": "advanced",
+    "tags": [
+      "fastapi",
+      "put",
+      "authentication",
+      "database"
+    ],
+    "source_repo": "JakubPluta/gymhero",
+    "source_file": "gymhero/api/routes/training_unit.py",
+    "complexity_score": 50
+  },
+  {
+    "instruction": "Create a FastAPI GET endpoint with authentication and with database integration",
+    "input": "Include database operations",
+    "output": "@router.get(\n    \"/all\", response_model=List[Optional[UserOut]], status_code=status.HTTP_200_OK\n)\ndef fetch_all_users(\n    db: Session = Depends(get_db), pagination_params=Depends(get_pagination_params)\n):\n    \"\"\"\n    Fetches all users with pagination.\n\n    Parameters:\n        db (Session): The database session.\n        pagination_params (Tuple[int, int]): A tuple with\n            the skip and limit values for pagination.\n\n    Returns:\n        List[Optional[UserOut]]: A list of user objects,\n            or None if there are no users.\n\n    Raises:\n        None\n    \"\"\"\n    skip, limit = pagination_params\n    return user_crud.get_many(db, skip=skip, limit=limit)",
+    "category": "authentication",
+    "difficulty": "intermediate",
+    "tags": [
+      "fastapi",
+      "get",
+      "authentication",
+      "database"
+    ],
+    "source_repo": "JakubPluta/gymhero",
+    "source_file": "gymhero/api/routes/user.py",
+    "complexity_score": 29
+  },
+  {
+    "instruction": "Create a FastAPI GET endpoint with authentication and with database integration",
+    "input": "Include database operations",
+    "output": "@router.get(\"/{user_id}\", response_model=UserOut, status_code=status.HTTP_200_OK)\ndef fetch_user_by_id(user_id: int, db: Session = Depends(get_db)):\n    \"\"\"\n    Fetches a user by their ID from the database.\n\n    Parameters:\n        user_id (int): The ID of the user to fetch.\n        db (Session): The database session.\n\n    Returns:\n        UserOut: The user object fetched from the database.\n\n    Raises:\n        HTTPException: If the user with the specified ID is not found in the database.\n    \"\"\"\n    user = user_crud.get_one(db, User.id == user_id)\n    if not user:\n        raise HTTPException(\n            status_code=status.HTTP_404_NOT_FOUND,\n            detail=f\"User with {user_id} not found\",\n        )\n    return user",
+    "category": "authentication",
+    "difficulty": "intermediate",
+    "tags": [
+      "fastapi",
+      "get",
+      "authentication",
+      "database"
+    ],
+    "source_repo": "JakubPluta/gymhero",
+    "source_file": "gymhero/api/routes/user.py",
+    "complexity_score": 30
+  },
+  {
+    "instruction": "Create a FastAPI GET endpoint with authentication and with database integration",
+    "input": "Include database operations",
+    "output": "@router.get(\"/email/{email}\", response_model=UserOut, status_code=status.HTTP_200_OK)\ndef fetch_user_by_email(email: str, db: Session = Depends(get_db)):\n    \"\"\"\n    Fetches a user from the database based on the provided email.\n\n    Parameters:\n        email (str): The email address of the user.\n        db (Session, optional): The database session.\n        Defaults to the result of calling `get_db`.\n\n    Returns:\n        UserOut: The user object fetched from the database.\n\n    Raises:\n        HTTPException: If no user is found with the provided email,\n            an HTTP 404 Not Found exception is raised.\n    \"\"\"\n    user = user_crud.get_user_by_email(db, email=email)\n    if not user:\n        raise HTTPException(\n            status_code=status.HTTP_404_NOT_FOUND, detail=f\"User with {email} not found\"\n        )\n    return user",
+    "category": "authentication",
+    "difficulty": "advanced",
+    "tags": [
+      "fastapi",
+      "get",
+      "authentication",
+      "database"
+    ],
+    "source_repo": "JakubPluta/gymhero",
+    "source_file": "gymhero/api/routes/user.py",
+    "complexity_score": 33
+  },
+  {
+    "instruction": "Create a FastAPI POST endpoint with authentication and with database integration",
+    "input": "Include database operations",
+    "output": "@router.post(\"/\", response_model=UserOut, status_code=status.HTTP_201_CREATED)\ndef create_user(\n    user_create: UserCreate,\n    db: Session = Depends(get_db),\n    user: User = Depends(get_current_superuser),\n):\n    \"\"\"\n    Create a new user.\n\n    Parameters:\n        user_create (UserCreate): The user data to be created.\n        db (Session): The database session.\n        user (User): The current superuser.\n\n    Returns:\n        User: The newly created user.\n\n    Raises:\n        HTTPException: If a user with the same email already exists in the system.\n    \"\"\"\n    user = user_crud.get_user_by_email(db, email=user_create.email)\n    if user is not None:\n        raise HTTPException(\n            status_code=status.HTTP_409_CONFLICT,\n            detail=f\"The user with this {user_create.email} already exists \\\n            in the system\",\n        )\n    user_in = UserInDB(\n        **user_create.model_dump(),\n        hashed_password=get_password_hash(user_create.password),\n    )\n    user = user_crud.create(db, user_in)\n    return user",
+    "category": "authentication",
+    "difficulty": "advanced",
+    "tags": [
+      "fastapi",
+      "post",
+      "authentication",
+      "database"
+    ],
+    "source_repo": "JakubPluta/gymhero",
+    "source_file": "gymhero/api/routes/user.py",
+    "complexity_score": 41
+  },
+  {
+    "instruction": "Create a FastAPI DELETE endpoint with authentication and with database integration",
+    "input": "Include database operations",
+    "output": "@router.delete(\"/{user_id}\", status_code=status.HTTP_200_OK)\ndef delete_user(\n    user_id: int,\n    db: Session = Depends(get_db),\n    current_user: User = Depends(get_current_superuser),\n):\n    \"\"\"\n    Delete a user by user ID.\n\n    Parameters:\n        user_id (int): The ID of the user to delete.\n        db (Session, optional): The database session. Defaults to Depends(get_db).\n        current_user (User, optional): The current authenticated superuser.\n\n    Raises:\n        HTTPException: If the user is not found or the user tries to delete themselves.\n        HTTPException: If there is an error deleting the user.\n\n    Returns:\n        None\n\n    \"\"\"\n    user = user_crud.get_one(db, User.id == user_id)\n    if user is None:\n        raise HTTPException(\n            status_code=status.HTTP_404_NOT_FOUND,\n            detail=f\"User with id {user_id} not found. Cannot delete.\",\n        )\n\n    if user.id == current_user.id:\n        raise HTTPException(\n            status_code=status.HTTP_403_FORBIDDEN,\n            detail=\"You cannot delete yourself\",\n        )\n    try:\n        user_crud.delete(db, user)\n    except Exception as e:  # pragma: no cover\n        raise HTTPException(\n            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,\n            detail=f\"Couldn't delete user with id {user_id}. Error: {str(e)}\",\n        ) from e  # pragma: no cover\n\n    return {\"detail\": f\"User with id {user_id} deleted.\"}",
+    "category": "authentication",
+    "difficulty": "advanced",
+    "tags": [
+      "fastapi",
+      "delete",
+      "authentication",
+      "database"
+    ],
+    "source_repo": "JakubPluta/gymhero",
+    "source_file": "gymhero/api/routes/user.py",
+    "complexity_score": 50
+  },
+  {
+    "instruction": "Create a FastAPI PUT endpoint with authentication and with database integration",
+    "input": "Include database operations",
+    "output": "@router.put(\"/{user_id}\", response_model=UserOut, status_code=status.HTTP_200_OK)\ndef update_user(\n    user_id: int,\n    user_update: UserUpdate,\n    db: Session = Depends(get_db),\n    user: User = Depends(get_current_superuser),\n):\n    \"\"\"\n    Update a user with the given ID.\n\n    Parameters:\n        user_id (int): The ID of the user to update.\n        user_update (UserUpdate): The updated user information.\n        db (Session, optional): The database session. Defaults to Depends(get_db).\n        user (User, optional): The current superuser.\n\n    Returns:\n        UserOut: The updated user information.\n\n    Raises:\n        HTTPException: If the user is not found or the user tries to update themselves.\n        HTTPException: If there is an error updating the user.\n    \"\"\"\n    user = user_crud.get_one(db, User.id == user_id)\n    if user is None:\n        raise HTTPException(\n            status_code=status.HTTP_404_NOT_FOUND,\n            detail=f\"User with id {user_id} not found. Cannot update.\",\n        )\n    try:\n        user = user_crud.update(db, user, user_update)\n    except Exception as e:  # pragma: no cover\n        raise HTTPException(\n            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,\n            detail=f\"Couldn't update user with id {user_id}. Error: {str(e)}\",\n        ) from e  # pragma: no cover\n    return user",
+    "category": "authentication",
+    "difficulty": "advanced",
+    "tags": [
+      "fastapi",
+      "put",
+      "authentication",
+      "database"
+    ],
+    "source_repo": "JakubPluta/gymhero",
+    "source_file": "gymhero/api/routes/user.py",
+    "complexity_score": 50
+  },
+  {
+    "instruction": "Create a FastAPI GET endpoint",
+    "input": "Include proper error handling and response formatting",
+    "output": "@app.get(\"/api/healthchecker\")\ndef root():\n    return {\"message\": \"Welcome to FastAPI with MongoDB\"}",
+    "category": "endpoints",
+    "difficulty": "beginner",
+    "tags": [
+      "fastapi",
+      "get"
+    ],
+    "source_repo": "wpcodevo/fastapi_mongodb",
+    "source_file": "app/main.py",
+    "complexity_score": 3
+  },
+  {
+    "instruction": "Create a FastAPI POST endpoint with authentication",
+    "input": "Include authentication and authorization",
+    "output": "@router.post('/login')\ndef login(payload: schemas.LoginUserSchema, response: Response, Authorize: AuthJWT = Depends()):\n    # Check if the user exist\n    db_user = User.find_one({'email': payload.email.lower()})\n    if not db_user:\n        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,\n                            detail='Incorrect Email or Password')\n    user = userEntity(db_user)\n\n    # Check if user verified his email\n    if not user['verified']:\n        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,\n                            detail='Please verify your email address')\n\n    # Check if the password is valid\n    if not utils.verify_password(payload.password, user['password']):\n        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,\n                            detail='Incorrect Email or Password')\n\n    # Create access token\n    access_token = Authorize.create_access_token(\n        subject=str(user[\"id\"]), expires_time=timedelta(minutes=ACCESS_TOKEN_EXPIRES_IN))\n\n    # Create refresh token\n    refresh_token = Authorize.create_refresh_token(\n        subject=str(user[\"id\"]), expires_time=timedelta(minutes=REFRESH_TOKEN_EXPIRES_IN))\n\n    # Store refresh and access tokens in cookie\n    response.set_cookie('access_token', access_token, ACCESS_TOKEN_EXPIRES_IN * 60,\n                        ACCESS_TOKEN_EXPIRES_IN * 60, '/', None, False, True, 'lax')\n    response.set_cookie('refresh_token', refresh_token,\n                        REFRESH_TOKEN_EXPIRES_IN * 60, REFRESH_TOKEN_EXPIRES_IN * 60, '/', None, False, True, 'lax')\n    response.set_cookie('logged_in', 'True', ACCESS_TOKEN_EXPIRES_IN * 60,\n                        ACCESS_TOKEN_EXPIRES_IN * 60, '/', None, False, False, 'lax')\n\n    # Send both access\n    return {'status': 'success', 'access_token': access_token}",
+    "category": "authentication",
+    "difficulty": "advanced",
+    "tags": [
+      "fastapi",
+      "post",
+      "authentication"
+    ],
+    "source_repo": "wpcodevo/fastapi_mongodb",
+    "source_file": "app/routers/auth.py",
+    "complexity_score": 42
+  },
+  {
+    "instruction": "Create a FastAPI GET endpoint with authentication",
+    "input": "Include authentication and authorization",
+    "output": "@router.get('/refresh')\ndef refresh_token(response: Response, Authorize: AuthJWT = Depends()):\n    try:\n        Authorize.jwt_refresh_token_required()\n\n        user_id = Authorize.get_jwt_subject()\n        if not user_id:\n            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,\n                                detail='Could not refresh access token')\n        user = userEntity(User.find_one({'_id': ObjectId(str(user_id))}))\n        if not user:\n            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,\n                                detail='The user belonging to this token no logger exist')\n        access_token = Authorize.create_access_token(\n            subject=str(user[\"id\"]), expires_time=timedelta(minutes=ACCESS_TOKEN_EXPIRES_IN))\n    except Exception as e:\n        error = e.__class__.__name__\n        if error == 'MissingTokenError':\n            raise HTTPException(\n                status_code=status.HTTP_400_BAD_REQUEST, detail='Please provide refresh token')\n        raise HTTPException(\n            status_code=status.HTTP_400_BAD_REQUEST, detail=error)\n\n    response.set_cookie('access_token', access_token, ACCESS_TOKEN_EXPIRES_IN * 60,\n                        ACCESS_TOKEN_EXPIRES_IN * 60, '/', None, False, True, 'lax')\n    response.set_cookie('logged_in', 'True', ACCESS_TOKEN_EXPIRES_IN * 60,\n                        ACCESS_TOKEN_EXPIRES_IN * 60, '/', None, False, False, 'lax')\n    return {'access_token': access_token}",
+    "category": "authentication",
+    "difficulty": "advanced",
+    "tags": [
+      "fastapi",
+      "get",
+      "authentication"
+    ],
+    "source_repo": "wpcodevo/fastapi_mongodb",
+    "source_file": "app/routers/auth.py",
+    "complexity_score": 42
+  },
+  {
+    "instruction": "Create a FastAPI GET endpoint with authentication",
+    "input": "Include authentication and authorization",
+    "output": "@router.get('/logout', status_code=status.HTTP_200_OK)\ndef logout(response: Response, Authorize: AuthJWT = Depends(), user_id: str = Depends(oauth2.require_user)):\n    Authorize.unset_jwt_cookies()\n    response.set_cookie('logged_in', '', -1)\n\n    return {'status': 'success'}",
+    "category": "authentication",
+    "difficulty": "beginner",
+    "tags": [
+      "fastapi",
+      "get",
+      "authentication"
+    ],
+    "source_repo": "wpcodevo/fastapi_mongodb",
+    "source_file": "app/routers/auth.py",
+    "complexity_score": 13
+  },
+  {
+    "instruction": "Create a FastAPI GET endpoint with authentication",
+    "input": "Include authentication and authorization",
+    "output": "@router.get('/verifyemail/{token}')\ndef verify_me(token: str):\n    hashedCode = hashlib.sha256()\n    hashedCode.update(bytes.fromhex(token))\n    verification_code = hashedCode.hexdigest()\n    result = User.find_one_and_update({\"verification_code\": verification_code}, {\n        \"$set\": {\"verification_code\": None, \"verified\": True, \"updated_at\": datetime.utcnow()}}, new=True)\n    if not result:\n        raise HTTPException(\n            status_code=status.HTTP_403_FORBIDDEN, detail='Invalid verification code or account already verified')\n    return {\n        \"status\": \"success\",\n        \"message\": \"Account verified successfully\"\n    }",
+    "category": "authentication",
+    "difficulty": "intermediate",
+    "tags": [
+      "fastapi",
+      "get",
+      "authentication"
+    ],
+    "source_repo": "wpcodevo/fastapi_mongodb",
+    "source_file": "app/routers/auth.py",
+    "complexity_score": 16
+  },
+  {
+    "instruction": "Create a FastAPI GET endpoint with Pydantic validation and with authentication",
+    "input": "Include proper request validation",
+    "output": "@router.get('/')\ndef get_posts(limit: int = 10, page: int = 1, search: str = '', user_id: str = Depends(require_user)):\n    skip = (page - 1) * limit\n    pipeline = [\n        {'$match': {}},\n        {'$lookup': {'from': 'users', 'localField': 'user',\n                     'foreignField': '_id', 'as': 'user'}},\n        {'$unwind': '$user'},\n        {\n            '$skip': skip\n        }, {\n            '$limit': limit\n        }\n    ]\n    posts = postListEntity(Post.aggregate(pipeline))\n    return {'status': 'success', 'results': len(posts), 'posts': posts}",
+    "category": "authentication",
+    "difficulty": "intermediate",
+    "tags": [
+      "fastapi",
+      "get",
+      "pydantic",
+      "authentication"
+    ],
+    "source_repo": "wpcodevo/fastapi_mongodb",
+    "source_file": "app/routers/post.py",
+    "complexity_score": 19
+  },
+  {
+    "instruction": "Create a FastAPI POST endpoint with Pydantic validation and with authentication",
+    "input": "Include proper request validation",
+    "output": "@router.post('/', status_code=status.HTTP_201_CREATED)\ndef create_post(post: schemas.CreatePostSchema, user_id: str = Depends(require_user)):\n    post.user = ObjectId(user_id)\n    post.created_at = datetime.utcnow()\n    post.updated_at = post.created_at\n    try:\n        result = Post.insert_one(post.dict())\n        pipeline = [\n            {'$match': {'_id': result.inserted_id}},\n            {'$lookup': {'from': 'users', 'localField': 'user',\n                         'foreignField': '_id', 'as': 'user'}},\n            {'$unwind': '$user'},\n        ]\n        new_post = postListEntity(Post.aggregate(pipeline))[0]\n        return new_post\n    except DuplicateKeyError:\n        raise HTTPException(status_code=status.HTTP_409_CONFLICT,\n                            detail=f\"Post with title: '{post.title}' already exists\")",
+    "category": "authentication",
+    "difficulty": "intermediate",
+    "tags": [
+      "fastapi",
+      "post",
+      "pydantic",
+      "authentication"
+    ],
+    "source_repo": "wpcodevo/fastapi_mongodb",
+    "source_file": "app/routers/post.py",
+    "complexity_score": 28
+  },
+  {
+    "instruction": "Create a FastAPI PUT endpoint with authentication",
+    "input": "Include authentication and authorization",
+    "output": "@router.put('/{id}')\ndef update_post(id: str, payload: schemas.UpdatePostSchema, user_id: str = Depends(require_user)):\n    if not ObjectId.is_valid(id):\n        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,\n                            detail=f\"Invalid id: {id}\")\n    updated_post = Post.find_one_and_update(\n        {'_id': ObjectId(id)}, {'$set': payload.dict(exclude_none=True)}, return_document=ReturnDocument.AFTER)\n    if not updated_post:\n        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,\n                            detail=f'No post with this id: {id} found')\n    return postEntity(updated_post)",
+    "category": "authentication",
+    "difficulty": "intermediate",
+    "tags": [
+      "fastapi",
+      "put",
+      "authentication"
+    ],
+    "source_repo": "wpcodevo/fastapi_mongodb",
+    "source_file": "app/routers/post.py",
+    "complexity_score": 16
+  },
+  {
+    "instruction": "Create a FastAPI GET endpoint with Pydantic validation and with authentication",
+    "input": "Include proper request validation",
+    "output": "@router.get('/{id}')\ndef get_post(id: str, user_id: str = Depends(require_user)):\n    if not ObjectId.is_valid(id):\n        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,\n                            detail=f\"Invalid id: {id}\")\n    pipeline = [\n        {'$match': {'_id': ObjectId(id)}},\n        {'$lookup': {'from': 'users', 'localField': 'user',\n                     'foreignField': '_id', 'as': 'user'}},\n        {'$unwind': '$user'},\n    ]\n    db_cursor = Post.aggregate(pipeline)\n    results = list(db_cursor)\n\n    if len(results) == 0:\n        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,\n                            detail=f\"No post with this id: {id} found\")\n\n    post = postListEntity(results)[0]\n    return post",
+    "category": "authentication",
+    "difficulty": "intermediate",
+    "tags": [
+      "fastapi",
+      "get",
+      "pydantic",
+      "authentication"
+    ],
+    "source_repo": "wpcodevo/fastapi_mongodb",
+    "source_file": "app/routers/post.py",
+    "complexity_score": 25
+  },
+  {
+    "instruction": "Create a FastAPI DELETE endpoint with authentication",
+    "input": "Include authentication and authorization",
+    "output": "@router.delete('/{id}')\ndef delete_post(id: str, user_id: str = Depends(require_user)):\n    if not ObjectId.is_valid(id):\n        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,\n                            detail=f\"Invalid id: {id}\")\n    post = Post.find_one_and_delete({'_id': ObjectId(id)})\n    if not post:\n        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,\n                            detail=f'No post with this id: {id} found')\n    return Response(status_code=status.HTTP_204_NO_CONTENT)",
+    "category": "authentication",
+    "difficulty": "beginner",
+    "tags": [
+      "fastapi",
+      "delete",
+      "authentication"
+    ],
+    "source_repo": "wpcodevo/fastapi_mongodb",
+    "source_file": "app/routers/post.py",
+    "complexity_score": 15
+  },
+  {
+    "instruction": "Create a FastAPI GET endpoint with authentication",
+    "input": "Include authentication and authorization",
+    "output": "@router.get('/me', response_model=schemas.UserResponse)\ndef get_me(user_id: str = Depends(oauth2.require_user)):\n    user = userResponseEntity(User.find_one({'_id': ObjectId(str(user_id))}))\n    return {\"status\": \"success\", \"user\": user}",
+    "category": "authentication",
+    "difficulty": "beginner",
+    "tags": [
+      "fastapi",
+      "get",
+      "authentication"
+    ],
+    "source_repo": "wpcodevo/fastapi_mongodb",
+    "source_file": "app/routers/user.py",
+    "complexity_score": 7
+  },
+  {
+    "instruction": "Create a FastAPI GET endpoint",
+    "input": "Include proper error handling and response formatting",
+    "output": "@app.get('/api/healthchecker')\ndef root():\n    return {'message': 'Hello World'}",
+    "category": "endpoints",
+    "difficulty": "beginner",
+    "tags": [
+      "fastapi",
+      "get"
+    ],
+    "source_repo": "wpcodevo/python_fastapi",
+    "source_file": "app/main.py",
+    "complexity_score": 3
+  },
+  {
+    "instruction": "Create a FastAPI POST endpoint with Pydantic validation and with authentication and with database integration",
+    "input": "Include proper request validation and database operations",
+    "output": "@router.post('/login')\ndef login(payload: schemas.LoginUserSchema, response: Response, db: Session = Depends(get_db), Authorize: AuthJWT = Depends()):\n    # Check if the user exist\n    user = db.query(models.User).filter(\n        models.User.email == EmailStr(payload.email.lower())).first()\n    if not user:\n        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,\n                            detail='Incorrect Email or Password')\n\n    # Check if user verified his email\n    if not user.verified:\n        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,\n                            detail='Please verify your email address')\n\n    # Check if the password is valid\n    if not utils.verify_password(payload.password, user.password):\n        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,\n                            detail='Incorrect Email or Password')\n\n    # Create access token\n    access_token = Authorize.create_access_token(\n        subject=str(user.id), expires_time=timedelta(minutes=ACCESS_TOKEN_EXPIRES_IN))\n\n    # Create refresh token\n    refresh_token = Authorize.create_refresh_token(\n        subject=str(user.id), expires_time=timedelta(minutes=REFRESH_TOKEN_EXPIRES_IN))\n\n    # Store refresh and access tokens in cookie\n    response.set_cookie('access_token', access_token, ACCESS_TOKEN_EXPIRES_IN * 60,\n                        ACCESS_TOKEN_EXPIRES_IN * 60, '/', None, False, True, 'lax')\n    response.set_cookie('refresh_token', refresh_token,\n                        REFRESH_TOKEN_EXPIRES_IN * 60, REFRESH_TOKEN_EXPIRES_IN * 60, '/', None, False, True, 'lax')\n    response.set_cookie('logged_in', 'True', ACCESS_TOKEN_EXPIRES_IN * 60,\n                        ACCESS_TOKEN_EXPIRES_IN * 60, '/', None, False, False, 'lax')\n\n    # Send both access\n    return {'status': 'success', 'access_token': access_token}",
+    "category": "authentication",
+    "difficulty": "advanced",
+    "tags": [
+      "fastapi",
+      "post",
+      "pydantic",
+      "authentication",
+      "database"
+    ],
+    "source_repo": "wpcodevo/python_fastapi",
+    "source_file": "app/routers/auth.py",
+    "complexity_score": 45
+  },
+  {
+    "instruction": "Create a FastAPI GET endpoint with authentication and with database integration",
+    "input": "Include database operations",
+    "output": "@router.get('/refresh')\ndef refresh_token(response: Response, request: Request, Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):\n    try:\n        Authorize.jwt_refresh_token_required()\n\n        user_id = Authorize.get_jwt_subject()\n        if not user_id:\n            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,\n                                detail='Could not refresh access token')\n        user = db.query(models.User).filter(models.User.id == user_id).first()\n        if not user:\n            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,\n                                detail='The user belonging to this token no logger exist')\n        access_token = Authorize.create_access_token(\n            subject=str(user.id), expires_time=timedelta(minutes=ACCESS_TOKEN_EXPIRES_IN))\n    except Exception as e:\n        error = e.__class__.__name__\n        if error == 'MissingTokenError':\n            raise HTTPException(\n                status_code=status.HTTP_400_BAD_REQUEST, detail='Please provide refresh token')\n        raise HTTPException(\n            status_code=status.HTTP_400_BAD_REQUEST, detail=error)\n\n    response.set_cookie('access_token', access_token, ACCESS_TOKEN_EXPIRES_IN * 60,\n                        ACCESS_TOKEN_EXPIRES_IN * 60, '/', None, False, True, 'lax')\n    response.set_cookie('logged_in', 'True', ACCESS_TOKEN_EXPIRES_IN * 60,\n                        ACCESS_TOKEN_EXPIRES_IN * 60, '/', None, False, False, 'lax')\n    return {'access_token': access_token}",
+    "category": "authentication",
+    "difficulty": "advanced",
+    "tags": [
+      "fastapi",
+      "get",
+      "authentication",
+      "database"
+    ],
+    "source_repo": "wpcodevo/python_fastapi",
+    "source_file": "app/routers/auth.py",
+    "complexity_score": 45
+  },
+  {
+    "instruction": "Create a FastAPI GET endpoint with authentication and with database integration",
+    "input": "Include database operations",
+    "output": "@router.get('/verifyemail/{token}')\ndef verify_me(token: str, db: Session = Depends(get_db)):\n    hashedCode = hashlib.sha256()\n    hashedCode.update(bytes.fromhex(token))\n    verification_code = hashedCode.hexdigest()\n    user_query = db.query(models.User).filter(\n        models.User.verification_code == verification_code)\n    db.commit()\n    user = user_query.first()\n    if not user:\n        raise HTTPException(\n            status_code=status.HTTP_403_FORBIDDEN, detail='Email can only be verified once')\n    user_query.update(\n        {'verified': True, 'verification_code': None}, synchronize_session=False)\n    db.commit()\n    return {\n        \"status\": \"success\",\n        \"message\": \"Account verified successfully\"\n    }",
+    "category": "authentication",
+    "difficulty": "intermediate",
+    "tags": [
+      "fastapi",
+      "get",
+      "authentication",
+      "database"
+    ],
+    "source_repo": "wpcodevo/python_fastapi",
+    "source_file": "app/routers/auth.py",
+    "complexity_score": 27
+  },
+  {
+    "instruction": "Create a FastAPI GET endpoint with authentication and with database integration",
+    "input": "Include database operations",
+    "output": "@router.get('/', response_model=schemas.ListPostResponse)\ndef get_posts(db: Session = Depends(get_db), limit: int = 10, page: int = 1, search: str = '', user_id: str = Depends(require_user)):\n    skip = (page - 1) * limit\n\n    posts = db.query(models.Post).group_by(models.Post.id).filter(\n        models.Post.title.contains(search)).limit(limit).offset(skip).all()\n    return {'status': 'success', 'results': len(posts), 'posts': posts}",
+    "category": "authentication",
+    "difficulty": "beginner",
+    "tags": [
+      "fastapi",
+      "get",
+      "authentication",
+      "database"
+    ],
+    "source_repo": "wpcodevo/python_fastapi",
+    "source_file": "app/routers/post.py",
+    "complexity_score": 13
+  },
+  {
+    "instruction": "Create a FastAPI POST endpoint with authentication and with database integration",
+    "input": "Include database operations",
+    "output": "@router.post('/', status_code=status.HTTP_201_CREATED, response_model=schemas.PostResponse)\ndef create_post(post: schemas.CreatePostSchema, db: Session = Depends(get_db), owner_id: str = Depends(require_user)):\n    post.user_id = uuid.UUID(owner_id)\n    new_post = models.Post(**post.dict())\n    db.add(new_post)\n    db.commit()\n    db.refresh(new_post)\n    return new_post",
+    "category": "authentication",
+    "difficulty": "beginner",
+    "tags": [
+      "fastapi",
+      "post",
+      "authentication",
+      "database"
+    ],
+    "source_repo": "wpcodevo/python_fastapi",
+    "source_file": "app/routers/post.py",
+    "complexity_score": 14
+  },
+  {
+    "instruction": "Create a FastAPI PUT endpoint with authentication and with database integration",
+    "input": "Include database operations",
+    "output": "@router.put('/{id}', response_model=schemas.PostResponse)\ndef update_post(id: str, post: schemas.UpdatePostSchema, db: Session = Depends(get_db), user_id: str = Depends(require_user)):\n    post_query = db.query(models.Post).filter(models.Post.id == id)\n    updated_post = post_query.first()\n\n    if not updated_post:\n        raise HTTPException(status_code=status.HTTP_200_OK,\n                            detail=f'No post with this id: {id} found')\n    if updated_post.user_id != uuid.UUID(user_id):\n        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,\n                            detail='You are not allowed to perform this action')\n    post.user_id = user_id\n    post_query.update(post.dict(exclude_unset=True), synchronize_session=False)\n    db.commit()\n    return updated_post",
+    "category": "authentication",
+    "difficulty": "intermediate",
+    "tags": [
+      "fastapi",
+      "put",
+      "authentication",
+      "database"
+    ],
+    "source_repo": "wpcodevo/python_fastapi",
+    "source_file": "app/routers/post.py",
+    "complexity_score": 23
+  },
+  {
+    "instruction": "Create a FastAPI GET endpoint with authentication and with database integration",
+    "input": "Include database operations",
+    "output": "@router.get('/{id}', response_model=schemas.PostResponse)\ndef get_post(id: str, db: Session = Depends(get_db), user_id: str = Depends(require_user)):\n    post = db.query(models.Post).filter(models.Post.id == id).first()\n    if not post:\n        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,\n                            detail=f\"No post with this id: {id} found\")\n    return post",
+    "category": "authentication",
+    "difficulty": "beginner",
+    "tags": [
+      "fastapi",
+      "get",
+      "authentication",
+      "database"
+    ],
+    "source_repo": "wpcodevo/python_fastapi",
+    "source_file": "app/routers/post.py",
+    "complexity_score": 15
+  },
+  {
+    "instruction": "Create a FastAPI DELETE endpoint with authentication and with database integration",
+    "input": "Include database operations",
+    "output": "@router.delete('/{id}')\ndef delete_post(id: str, db: Session = Depends(get_db), user_id: str = Depends(require_user)):\n    post_query = db.query(models.Post).filter(models.Post.id == id)\n    post = post_query.first()\n    if not post:\n        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,\n                            detail=f'No post with this id: {id} found')\n\n    if str(post.user_id) != user_id:\n        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,\n                            detail='You are not allowed to perform this action')\n    post_query.delete(synchronize_session=False)\n    db.commit()\n    return Response(status_code=status.HTTP_204_NO_CONTENT)",
+    "category": "authentication",
+    "difficulty": "intermediate",
+    "tags": [
+      "fastapi",
+      "delete",
+      "authentication",
+      "database"
+    ],
+    "source_repo": "wpcodevo/python_fastapi",
+    "source_file": "app/routers/post.py",
+    "complexity_score": 22
+  },
+  {
+    "instruction": "Create a FastAPI GET endpoint with authentication and with database integration",
+    "input": "Include database operations",
+    "output": "@router.get('/me', response_model=schemas.UserResponse)\ndef get_me(db: Session = Depends(get_db), user_id: str = Depends(oauth2.require_user)):\n    user = db.query(models.User).filter(models.User.id == user_id).first()\n    return user",
+    "category": "authentication",
+    "difficulty": "beginner",
+    "tags": [
+      "fastapi",
+      "get",
+      "authentication",
+      "database"
+    ],
+    "source_repo": "wpcodevo/python_fastapi",
+    "source_file": "app/routers/user.py",
+    "complexity_score": 10
+  },
+  {
+    "instruction": "Create a FastAPI POST endpoint",
+    "input": "Include proper error handling and response formatting",
+    "output": "@app.post(\"/v1/system_components\", response_model=SystemComponent)\ndef create_system_component(component: SystemComponent) -> None:\n    \"\"\"Create a new system component in our monitored system.\"\"\"\n\n    if component.name in in_memory_db[\"system_components\"]:\n        error_msg = f\"{component.name} already exists in the monitored system.\"\n        raise HTTPException(status_code=409, detail=error_msg)\n\n    api_utils.register_system_component(component, in_memory_db)\n    api_utils.register_system_event(component, in_memory_db)\n\n    return component",
+    "category": "endpoints",
+    "difficulty": "beginner",
+    "tags": [
+      "fastapi",
+      "post"
+    ],
+    "source_repo": "NHopewell/diskspace-monitor-CRUD",
+    "source_file": "src/diskspacemonitor/main.py",
+    "complexity_score": 14
+  },
+  {
+    "instruction": "Create a FastAPI GET endpoint",
+    "input": "Include proper error handling and response formatting",
+    "output": "@app.get(\"/v1/system_components/{component_name}\", response_model=SystemComponent)\ndef read_system_component(component_name: str) -> t.Dict[str, str]:\n    \"\"\"Retrieve data regarding a single system component of our monitored system.\n\n    Path Parameters\n    ---------------\n    component_name: str\n        the unique name of a system component.\n    \"\"\"\n    if component_name not in in_memory_db[\"system_components\"]:\n        error_msg = f\"{component_name} does not exist in the monitored system.\"\n        raise HTTPException(status_code=404, detail=error_msg)\n\n    component = api_utils.get_system_component(component_name, in_memory_db)\n\n    return component",
+    "category": "endpoints",
+    "difficulty": "intermediate",
+    "tags": [
+      "fastapi",
+      "get"
+    ],
+    "source_repo": "NHopewell/diskspace-monitor-CRUD",
+    "source_file": "src/diskspacemonitor/main.py",
+    "complexity_score": 18
+  },
+  {
+    "instruction": "Create a FastAPI PATCH endpoint",
+    "input": "Include proper error handling and response formatting",
+    "output": "@app.patch(\"/v1/system_components/{component_name}\", response_model=SystemComponent)\ndef update_system_component(\n    component_name: str, updated_component: SystemComponentUpdate\n) -> None:\n    \"\"\"Update system component in our monitored system.\n\n    Path Parameters\n    ---------------\n    component_name: str\n        the unique name of a system component.\n\n    \"\"\"\n    if component_name not in in_memory_db[\"system_components\"]:\n        error_msg = f\"{component_name} does not exist in the monitored system.\"\n        raise HTTPException(status_code=404, detail=error_msg)\n\n    system_component = in_memory_db[\"system_components\"][component_name]\n\n    # update component total storage if in request\n    if new_total := updated_component.total_available_storage:\n        system_component.total_available_storage = new_total\n\n    # update component storage limit if in request\n    if new_storage_limit := updated_component.storage_limit:\n        try:\n            system_component.set_storage_limit(new_storage_limit)\n        except monitor_warnings.StorageLimitOutOfRangeError:\n\n            error_msg = f\"{new_storage_limit} is not a valid storage limit. Must be between 0 - 100\"\n            raise HTTPException(status_code=400, detail=error_msg)\n\n    # update component storage useage if in request\n    warning_flag, warning_type = False, None\n\n    if new_current_useage := updated_component.current_storage_useage:\n        try:\n            system_component.set_current_storage_useage(new_current_useage)\n\n        except monitor_warnings.OverMemoryLimitError:\n            warning_flag, warning_type = (\n                True,\n                monitor_warnings.WarningEnum.over_memory_limit,\n            )\n\n        except monitor_warnings.CloseToMemoryLimitError:\n            warning_flag, warning_type = (\n                True,\n                monitor_warnings.WarningEnum.close_to_memory_limit,\n            )\n\n    if warning_flag:\n        # register new system event along with a resource warning\n        api_utils.register_system_event(system_component, in_memory_db, warning_type)\n    else:\n        # register new system event only\n        api_utils.register_system_event(system_component, in_memory_db)\n\n    return system_component",
+    "category": "endpoints",
+    "difficulty": "advanced",
+    "tags": [
+      "fastapi",
+      "patch"
+    ],
+    "source_repo": "NHopewell/diskspace-monitor-CRUD",
+    "source_file": "src/diskspacemonitor/main.py",
+    "complexity_score": 50
+  },
+  {
+    "instruction": "Create a FastAPI DELETE endpoint",
+    "input": "Include proper error handling and response formatting",
+    "output": "@app.delete(\"/v1/system_components/{component_name}\")\ndef delete_system_component(component_name: str) -> None:\n    \"\"\"Remove a system component from our monitored system.\n\n    Path Parameters\n    ---------------\n    component_name: str\n        the unique name of a system component.\n    \"\"\"\n    if component_name not in in_memory_db[\"system_components\"]:\n        error_msg = f\"{component_name} does not exist in the monitored system.\"\n        raise HTTPException(status_code=404, detail=error_msg)\n\n    # not deleting the component from events or warnings to have backlog\n    del in_memory_db[\"system_components\"][component_name]\n\n    return Response(status_code=204)",
+    "category": "endpoints",
+    "difficulty": "intermediate",
+    "tags": [
+      "fastapi",
+      "delete"
+    ],
+    "source_repo": "NHopewell/diskspace-monitor-CRUD",
+    "source_file": "src/diskspacemonitor/main.py",
+    "complexity_score": 19
+  },
+  {
+    "instruction": "Create a FastAPI GET endpoint",
+    "input": "Include proper error handling and response formatting",
+    "output": "@app.get(\"/v1/system_components\")\ndef list_system_components(\n    skip: int = 0, limit: t.Optional[int] = 100\n) -> t.List[t.Dict[str, str]]:\n    \"\"\"List all currently monitored components of our system.\n\n    Query Parameters\n    ----------------\n    skip: int\n        The number of system components in our result set to skip.\n    limit: int\n        The total number of system components to return.\n    \"\"\"\n    all_system_components = list(in_memory_db[\"system_components\"].values())\n    filtered = all_system_components[skip : skip + limit]\n\n    return filtered",
+    "category": "endpoints",
+    "difficulty": "intermediate",
+    "tags": [
+      "fastapi",
+      "get"
+    ],
+    "source_repo": "NHopewell/diskspace-monitor-CRUD",
+    "source_file": "src/diskspacemonitor/main.py",
+    "complexity_score": 17
+  },
+  {
+    "instruction": "Create a FastAPI GET endpoint",
+    "input": "Include proper error handling and response formatting",
+    "output": "@app.get(\"/v1/component_events/{component_name}\")\ndef get_latest_useage(component_name: str) -> t.Dict[str, str]:\n    \"\"\"\n    Retrieve the latest storage useage of a component in the system.\n\n    Path Parameters\n    ---------------\n    component_name: str\n        the unique name of a system component.\n    \"\"\"\n    all_component_events = in_memory_db[\"system_events\"][component_name]\n    latest_event = all_component_events[len(all_component_events) - 1]\n\n    return latest_event.return_custom_event_dict()",
+    "category": "endpoints",
+    "difficulty": "beginner",
+    "tags": [
+      "fastapi",
+      "get"
+    ],
+    "source_repo": "NHopewell/diskspace-monitor-CRUD",
+    "source_file": "src/diskspacemonitor/main.py",
+    "complexity_score": 14
+  },
+  {
+    "instruction": "Create a FastAPI GET endpoint",
+    "input": "Include proper error handling and response formatting",
+    "output": "@app.get(\"/v1/component_events/{component_name}/history\")\ndef get_useage_history(\n    component_name: str, skip: int = 0, limit: t.Optional[int] = 100\n) -> t.List[t.Dict[str, str]]:\n    \"\"\"\n    List complete storage useage history for a component in the system.\n\n    Path Parameters\n    ---------------\n    component_name: str\n        the unique name of a system component.\n\n    Query Parameters\n    ----------------\n    skip: int\n        The number of component events in our result set to skip.\n    limit: int\n        The total number of component events to return.\n    \"\"\"\n    all_component_events = in_memory_db[\"system_events\"][component_name]\n    event_history_response = [\n        event.return_custom_event_dict() for event in all_component_events\n    ]\n\n    filtered = event_history_response[skip : skip + limit]\n\n    return filtered",
+    "category": "endpoints",
+    "difficulty": "intermediate",
+    "tags": [
+      "fastapi",
+      "get"
+    ],
+    "source_repo": "NHopewell/diskspace-monitor-CRUD",
+    "source_file": "src/diskspacemonitor/main.py",
+    "complexity_score": 27
+  },
+  {
+    "instruction": "Create a FastAPI GET endpoint",
+    "input": "Include proper error handling and response formatting",
+    "output": "@app.get(\"/v1/component_events\")\ndef get_all_latest_useages(\n    skip: int = 0, limit: t.Optional[int] = 100\n) -> t.List[t.Dict[str, str]]:\n    \"\"\"List the latest storage useage of all component in the system.\n\n    Query Parameters\n    ----------------\n    skip: int\n        The number of component events in our result set to skip.\n    limit: int\n        The total number of component events to return.\n    \"\"\"\n\n    all_components = in_memory_db[\"system_events\"].keys()\n\n    latest_events = []\n    for component in all_components:\n        all_component_events = in_memory_db[\"system_events\"][component]\n        latest_events.append(all_component_events[len(all_component_events) - 1])\n\n    latest_events_for_each_component_response = [\n        event.return_custom_event_dict() for event in latest_events\n    ]\n\n    filtered = latest_events_for_each_component_response[skip : skip + limit]\n\n    return filtered",
+    "category": "endpoints",
+    "difficulty": "intermediate",
+    "tags": [
+      "fastapi",
+      "get"
+    ],
+    "source_repo": "NHopewell/diskspace-monitor-CRUD",
+    "source_file": "src/diskspacemonitor/main.py",
+    "complexity_score": 28
+  },
+  {
+    "instruction": "Create a FastAPI GET endpoint",
+    "input": "Include proper error handling and response formatting",
+    "output": "@app.get(\"/v1/resource_warnings\")\ndef list_resource_warnings(\n    skip: int = 0, limit: t.Optional[int] = 100\n) -> t.List[t.Dict[str, str]]:\n    \"\"\"List all current resource warnings in our s.\n\n    Query Parameters\n    ----------------\n    skip: int\n        The number of system components in our result set to skip.\n    limit: int\n        The total number of system components to return.\n    \"\"\"\n    # extract all resource warnings from the db and pair to the component\n    # that triggered them\n    system_components = in_memory_db[\"system_events\"].keys()\n    warning_objects = api_utils.get_all_warnings(system_components, in_memory_db)\n    paired = api_utils.list_warning_dicts(\n        warning_objects, system_components, in_memory_db\n    )\n\n    filtered = paired[skip : skip + limit]\n\n    return filtered",
+    "category": "endpoints",
+    "difficulty": "intermediate",
+    "tags": [
+      "fastapi",
+      "get"
+    ],
+    "source_repo": "NHopewell/diskspace-monitor-CRUD",
+    "source_file": "src/diskspacemonitor/main.py",
+    "complexity_score": 24
+  },
+  {
+    "instruction": "Create a FastAPI GET endpoint",
+    "input": "Include proper error handling and response formatting",
+    "output": "@app.get(\"/api/healthchecker\")\ndef root():\n    return {\"message\": \"Welcome to FastAPI with SQLAlchemy\"}",
+    "category": "endpoints",
+    "difficulty": "beginner",
+    "tags": [
+      "fastapi",
+      "get"
+    ],
+    "source_repo": "wpcodevo/fastapi_sqlalchemy",
+    "source_file": "app/main.py",
+    "complexity_score": 3
+  },
+  {
+    "instruction": "Create a FastAPI GET endpoint with authentication and with database integration",
+    "input": "Include database operations",
+    "output": "@app.get(\"/api/db-healthchecker\")\ndef db_healthchecker(db: Session = Depends(get_db)):\n    try:\n        # Attempt to execute a simple query to check database connectivity\n        db.execute(\"SELECT 1\")\n        return {\"message\": \"Database is healthy\"}\n    except OperationalError:\n        raise HTTPException(status_code=500, detail=\"Database is not reachable\")",
+    "category": "authentication",
+    "difficulty": "intermediate",
+    "tags": [
+      "fastapi",
+      "get",
+      "authentication",
+      "database"
+    ],
+    "source_repo": "wpcodevo/fastapi_sqlalchemy",
+    "source_file": "app/main.py",
+    "complexity_score": 21
+  },
+  {
+    "instruction": "Create a FastAPI POST endpoint with database integration",
+    "input": "Include database operations",
+    "output": "@app.post(\"/segmentation\")\ndef get_segmentation_map(file: bytes = File(...)):\n    \"\"\"Get segmentation maps from image file\"\"\"\n    segmented_image = get_segments(model, file)\n    bytes_io = io.BytesIO()\n    segmented_image.save(bytes_io, format=\"PNG\")\n    return Response(bytes_io.getvalue(), media_type=\"image/png\")",
+    "category": "database",
+    "difficulty": "beginner",
+    "tags": [
+      "fastapi",
+      "post",
+      "database"
+    ],
+    "source_repo": "davidefiocco/streamlit-fastapi-model-serving",
+    "source_file": "fastapi/server.py",
+    "complexity_score": 7
+  },
+  {
+    "instruction": "Create a FastAPI GET endpoint with authentication and with database integration",
+    "input": "Include database operations",
+    "output": "@AuthorRouter.get(\"/\", response_model=List[AuthorSchema])\ndef index(\n    name: Optional[str] = None,\n    pageSize: Optional[int] = 100,\n    startIndex: Optional[int] = 0,\n    authorService: AuthorService = Depends(),\n):\n    return [\n        author.normalize()\n        for author in authorService.list(\n            name, pageSize, startIndex\n        )\n    ]",
+    "category": "authentication",
+    "difficulty": "intermediate",
+    "tags": [
+      "fastapi",
+      "get",
+      "authentication",
+      "database"
+    ],
+    "source_repo": "0xTheProDev/fastapi-clean-example",
+    "source_file": "routers/v1/AuthorRouter.py",
+    "complexity_score": 16
+  },
+  {
+    "instruction": "Create a FastAPI GET endpoint with authentication and with database integration",
+    "input": "Include database operations",
+    "output": "@AuthorRouter.get(\"/{id}\", response_model=AuthorSchema)\ndef get(id: int, authorService: AuthorService = Depends()):\n    return authorService.get(id).normalize()",
+    "category": "authentication",
+    "difficulty": "beginner",
+    "tags": [
+      "fastapi",
+      "get",
+      "authentication",
+      "database"
+    ],
+    "source_repo": "0xTheProDev/fastapi-clean-example",
+    "source_file": "routers/v1/AuthorRouter.py",
+    "complexity_score": 6
+  },
+  {
+    "instruction": "Create a FastAPI POST endpoint with authentication and with database integration",
+    "input": "Include database operations",
+    "output": "@AuthorRouter.post(\n    \"/\",\n    response_model=AuthorSchema,\n    status_code=status.HTTP_201_CREATED,\n)\ndef create(\n    author: AuthorPostRequestSchema,\n    authorService: AuthorService = Depends(),\n):\n    return authorService.create(author).normalize()",
+    "category": "authentication",
+    "difficulty": "beginner",
+    "tags": [
+      "fastapi",
+      "post",
+      "authentication",
+      "database"
+    ],
+    "source_repo": "0xTheProDev/fastapi-clean-example",
+    "source_file": "routers/v1/AuthorRouter.py",
+    "complexity_score": 13
+  },
+  {
+    "instruction": "Create a FastAPI PATCH endpoint with authentication and with database integration",
+    "input": "Include database operations",
+    "output": "@AuthorRouter.patch(\"/{id}\", response_model=AuthorSchema)\ndef update(\n    id: int,\n    author: AuthorPostRequestSchema,\n    authorService: AuthorService = Depends(),\n):\n    return authorService.update(id, author).normalize()",
+    "category": "authentication",
+    "difficulty": "beginner",
+    "tags": [
+      "fastapi",
+      "patch",
+      "authentication",
+      "database"
+    ],
+    "source_repo": "0xTheProDev/fastapi-clean-example",
+    "source_file": "routers/v1/AuthorRouter.py",
+    "complexity_score": 10
+  },
+  {
+    "instruction": "Create a FastAPI DELETE endpoint with authentication",
+    "input": "Include authentication and authorization",
+    "output": "@AuthorRouter.delete(\n    \"/{id}\", status_code=status.HTTP_204_NO_CONTENT\n)\ndef delete(\n    id: int, authorService: AuthorService = Depends()\n):\n    return authorService.delete(id)",
+    "category": "authentication",
+    "difficulty": "beginner",
+    "tags": [
+      "fastapi",
+      "delete",
+      "authentication"
+    ],
+    "source_repo": "0xTheProDev/fastapi-clean-example",
+    "source_file": "routers/v1/AuthorRouter.py",
+    "complexity_score": 10
+  },
+  {
+    "instruction": "Create a FastAPI GET endpoint with authentication and with database integration",
+    "input": "Include database operations",
+    "output": "@AuthorRouter.get(\n    \"/{id}/books/\", response_model=List[BookSchema]\n)\ndef get_books(\n    id: int, authorService: AuthorService = Depends()\n):\n    return [\n        book.normalize()\n        for book in authorService.get_books(id)\n    ]",
+    "category": "authentication",
+    "difficulty": "beginner",
+    "tags": [
+      "fastapi",
+      "get",
+      "authentication",
+      "database"
+    ],
+    "source_repo": "0xTheProDev/fastapi-clean-example",
+    "source_file": "routers/v1/AuthorRouter.py",
+    "complexity_score": 13
+  },
+  {
+    "instruction": "Create a FastAPI GET endpoint with authentication and with database integration",
+    "input": "Include database operations",
+    "output": "@BookRouter.get(\"/\", response_model=List[BookSchema])\ndef index(\n    name: Optional[str] = None,\n    pageSize: Optional[int] = 100,\n    startIndex: Optional[int] = 0,\n    bookService: BookService = Depends(),\n):\n    return [\n        book.normalize()\n        for book in bookService.list(\n            name, pageSize, startIndex\n        )\n    ]",
+    "category": "authentication",
+    "difficulty": "intermediate",
+    "tags": [
+      "fastapi",
+      "get",
+      "authentication",
+      "database"
+    ],
+    "source_repo": "0xTheProDev/fastapi-clean-example",
+    "source_file": "routers/v1/BookRouter.py",
+    "complexity_score": 16
+  },
+  {
+    "instruction": "Create a FastAPI GET endpoint with authentication and with database integration",
+    "input": "Include database operations",
+    "output": "@BookRouter.get(\"/{id}\", response_model=BookSchema)\ndef get(id: int, bookService: BookService = Depends()):\n    return bookService.get(id).normalize()",
+    "category": "authentication",
+    "difficulty": "beginner",
+    "tags": [
+      "fastapi",
+      "get",
+      "authentication",
+      "database"
+    ],
+    "source_repo": "0xTheProDev/fastapi-clean-example",
+    "source_file": "routers/v1/BookRouter.py",
+    "complexity_score": 6
+  },
+  {
+    "instruction": "Create a FastAPI POST endpoint with authentication and with database integration",
+    "input": "Include database operations",
+    "output": "@BookRouter.post(\n    \"/\",\n    response_model=BookSchema,\n    status_code=status.HTTP_201_CREATED,\n)\ndef create(\n    book: BookPostRequestSchema,\n    bookService: BookService = Depends(),\n):\n    return bookService.create(book).normalize()",
+    "category": "authentication",
+    "difficulty": "beginner",
+    "tags": [
+      "fastapi",
+      "post",
+      "authentication",
+      "database"
+    ],
+    "source_repo": "0xTheProDev/fastapi-clean-example",
+    "source_file": "routers/v1/BookRouter.py",
+    "complexity_score": 13
+  },
+  {
+    "instruction": "Create a FastAPI PATCH endpoint with authentication and with database integration",
+    "input": "Include database operations",
+    "output": "@BookRouter.patch(\"/{id}\", response_model=BookSchema)\ndef update(\n    id: int,\n    book: BookPostRequestSchema,\n    bookService: BookService = Depends(),\n):\n    return bookService.update(id, book).normalize()",
+    "category": "authentication",
+    "difficulty": "beginner",
+    "tags": [
+      "fastapi",
+      "patch",
+      "authentication",
+      "database"
+    ],
+    "source_repo": "0xTheProDev/fastapi-clean-example",
+    "source_file": "routers/v1/BookRouter.py",
+    "complexity_score": 10
+  },
+  {
+    "instruction": "Create a FastAPI DELETE endpoint with authentication",
+    "input": "Include authentication and authorization",
+    "output": "@BookRouter.delete(\n    \"/{id}\", status_code=status.HTTP_204_NO_CONTENT\n)\ndef delete(id: int, bookService: BookService = Depends()):\n    return bookService.delete(id)",
+    "category": "authentication",
+    "difficulty": "beginner",
+    "tags": [
+      "fastapi",
+      "delete",
+      "authentication"
+    ],
+    "source_repo": "0xTheProDev/fastapi-clean-example",
+    "source_file": "routers/v1/BookRouter.py",
+    "complexity_score": 8
+  },
+  {
+    "instruction": "Create a FastAPI GET endpoint with authentication and with database integration",
+    "input": "Include database operations",
+    "output": "@BookRouter.get(\n    \"/{id}/authors/\", response_model=List[AuthorSchema]\n)\ndef get_authors(\n    id: int, bookService: BookService = Depends()\n):\n    return [\n        author.normalize()\n        for author in bookService.get_authors(id)\n    ]",
+    "category": "authentication",
+    "difficulty": "beginner",
+    "tags": [
+      "fastapi",
+      "get",
+      "authentication",
+      "database"
+    ],
+    "source_repo": "0xTheProDev/fastapi-clean-example",
+    "source_file": "routers/v1/BookRouter.py",
+    "complexity_score": 13
+  },
+  {
+    "instruction": "Create a FastAPI POST endpoint with authentication and with database integration",
+    "input": "Include database operations",
+    "output": "@BookRouter.post(\n    \"/{id}/authors/\", response_model=List[AuthorSchema]\n)\ndef add_author(\n    id: int,\n    author: BookAuthorPostRequestSchema,\n    bookService: BookService = Depends(),\n):\n    return [\n        author.normalize()\n        for author in bookService.add_author(id, author)\n    ]",
+    "category": "authentication",
+    "difficulty": "beginner",
+    "tags": [
+      "fastapi",
+      "post",
+      "authentication",
+      "database"
+    ],
+    "source_repo": "0xTheProDev/fastapi-clean-example",
+    "source_file": "routers/v1/BookRouter.py",
+    "complexity_score": 15
+  },
+  {
+    "instruction": "Create a FastAPI DELETE endpoint with authentication and with database integration",
+    "input": "Include database operations",
+    "output": "@BookRouter.delete(\n    \"/{id}/authors/{author_id}\",\n    response_model=List[AuthorSchema],\n)\ndef remove_author(\n    id: int,\n    author_id: int,\n    bookService: BookService = Depends(),\n):\n    return [\n        author.normalize()\n        for author in bookService.remove_author(\n            id, author_id\n        )\n    ]",
+    "category": "authentication",
+    "difficulty": "intermediate",
+    "tags": [
+      "fastapi",
+      "delete",
+      "authentication",
+      "database"
+    ],
+    "source_repo": "0xTheProDev/fastapi-clean-example",
+    "source_file": "routers/v1/BookRouter.py",
+    "complexity_score": 18
+  },
+  {
+    "instruction": "Create a FastAPI GET endpoint",
+    "input": "Include proper error handling and response formatting",
+    "output": "@app.get(\"/\")\ndef home(request: Request):\n    return templates.TemplateResponse(\"home.html\", context={\"request\": request})",
+    "category": "endpoints",
+    "difficulty": "beginner",
+    "tags": [
+      "fastapi",
+      "get"
+    ],
+    "source_repo": "testdrivenio/fastapi-celery",
+    "source_file": "project/main.py",
+    "complexity_score": 3
+  },
+  {
+    "instruction": "Create a FastAPI POST endpoint",
+    "input": "Include proper error handling and response formatting",
+    "output": "@app.post(\"/tasks\", status_code=201)\ndef run_task(payload = Body(...)):\n    task_type = payload[\"type\"]\n    task = create_task.delay(int(task_type))\n    return JSONResponse({\"task_id\": task.id})",
+    "category": "endpoints",
+    "difficulty": "beginner",
+    "tags": [
+      "fastapi",
+      "post"
+    ],
+    "source_repo": "testdrivenio/fastapi-celery",
+    "source_file": "project/main.py",
+    "complexity_score": 5
+  },
+  {
+    "instruction": "Create a FastAPI GET endpoint",
+    "input": "Include proper error handling and response formatting",
+    "output": "@app.get(\"/tasks/{task_id}\")\ndef get_status(task_id):\n    task_result = AsyncResult(task_id)\n    result = {\n        \"task_id\": task_id,\n        \"task_status\": task_result.status,\n        \"task_result\": task_result.result\n    }\n    return JSONResponse(result)",
+    "category": "endpoints",
+    "difficulty": "beginner",
+    "tags": [
+      "fastapi",
+      "get"
+    ],
+    "source_repo": "testdrivenio/fastapi-celery",
+    "source_file": "project/main.py",
+    "complexity_score": 9
   }
 ]
