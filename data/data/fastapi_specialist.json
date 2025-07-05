@@ -1,0 +1,90 @@
+[
+  {
+    "instruction": "Create a simple FastAPI application with a hello world endpoint",
+    "input": "",
+    "output": "from fastapi import FastAPI\n\napp = FastAPI()\n\n@app.get(\"/\")\nasync def read_root():\n    return {\"message\": \"Hello World\"}\n\n@app.get(\"/items/{item_id}\")\nasync def read_item(item_id: int, q: str = None):\n    return {\"item_id\": item_id, \"q\": q}",
+    "category": "basic",
+    "difficulty": "beginner",
+    "tags": [
+      "fastapi",
+      "basic",
+      "endpoint"
+    ]
+  },
+  {
+    "instruction": "Create a FastAPI endpoint that accepts a user registration with email validation",
+    "input": "",
+    "output": "from fastapi import FastAPI\nfrom pydantic import BaseModel, EmailStr\nfrom typing import Optional\n\napp = FastAPI()\n\nclass UserRegistration(BaseModel):\n    username: str\n    email: EmailStr\n    password: str\n    full_name: Optional[str] = None\n\n@app.post(\"/register\")\nasync def register_user(user: UserRegistration):\n    return {\n        \"message\": \"User registered successfully\",\n        \"username\": user.username,\n        \"email\": user.email\n    }",
+    "category": "models",
+    "difficulty": "intermediate",
+    "tags": [
+      "fastapi",
+      "pydantic",
+      "validation",
+      "registration"
+    ]
+  },
+  {
+    "instruction": "Create a FastAPI endpoint to get all users from database using SQLAlchemy",
+    "input": "",
+    "output": "from fastapi import FastAPI, Depends\nfrom sqlalchemy.orm import Session\nfrom database import SessionLocal, User\n\napp = FastAPI()\n\ndef get_db():\n    db = SessionLocal()\n    try:\n        yield db\n    finally:\n        db.close()\n\n@app.get(\"/users\")\nasync def get_users(db: Session = Depends(get_db)):\n    users = db.query(User).all()\n    return users",
+    "category": "database",
+    "difficulty": "intermediate",
+    "tags": [
+      "fastapi",
+      "sqlalchemy",
+      "database",
+      "dependency-injection"
+    ]
+  },
+  {
+    "instruction": "Create a FastAPI endpoint with JWT authentication",
+    "input": "",
+    "output": "from fastapi import FastAPI, Depends, HTTPException, status\nfrom fastapi.security import HTTPBearer, HTTPAuthorizationCredentials\nfrom jose import JWTError, jwt\nfrom datetime import datetime, timedelta\n\napp = FastAPI()\nsecurity = HTTPBearer()\n\nSECRET_KEY = \"your-secret-key\"\nALGORITHM = \"HS256\"\n\ndef create_access_token(data: dict):\n    to_encode = data.copy()\n    expire = datetime.utcnow() + timedelta(minutes=15)\n    to_encode.update({\"exp\": expire})\n    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)\n    return encoded_jwt\n\nasync def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):\n    try:\n        payload = jwt.decode(credentials.credentials, SECRET_KEY, algorithms=[ALGORITHM])\n        username: str = payload.get(\"sub\")\n        if username is None:\n            raise HTTPException(status_code=401, detail=\"Invalid token\")\n        return username\n    except JWTError:\n        raise HTTPException(status_code=401, detail=\"Invalid token\")\n\n@app.get(\"/protected\")\nasync def protected_route(current_user: str = Depends(verify_token)):\n    return {\"message\": f\"Hello {current_user}\"}",
+    "category": "authentication",
+    "difficulty": "advanced",
+    "tags": [
+      "fastapi",
+      "jwt",
+      "authentication",
+      "security"
+    ]
+  },
+  {
+    "instruction": "Create a FastAPI endpoint to upload and process files",
+    "input": "",
+    "output": "from fastapi import FastAPI, UploadFile, File, HTTPException\nfrom typing import List\nimport shutil\nfrom pathlib import Path\n\napp = FastAPI()\n\n@app.post(\"/upload\")\nasync def upload_file(file: UploadFile = File(...)):\n    if not file.filename.endswith(('.jpg', '.jpeg', '.png', '.pdf')):\n        raise HTTPException(status_code=400, detail=\"Invalid file type\")\n    \n    file_path = Path(f\"uploads/{file.filename}\")\n    file_path.parent.mkdir(exist_ok=True)\n    \n    with open(file_path, \"wb\") as buffer:\n        shutil.copyfileobj(file.file, buffer)\n    \n    return {\n        \"filename\": file.filename,\n        \"size\": file_path.stat().st_size,\n        \"content_type\": file.content_type\n    }\n\n@app.post(\"/upload-multiple\")\nasync def upload_multiple_files(files: List[UploadFile] = File(...)):\n    uploaded_files = []\n    \n    for file in files:\n        file_path = Path(f\"uploads/{file.filename}\")\n        file_path.parent.mkdir(exist_ok=True)\n        \n        with open(file_path, \"wb\") as buffer:\n            shutil.copyfileobj(file.file, buffer)\n        \n        uploaded_files.append({\n            \"filename\": file.filename,\n            \"size\": file_path.stat().st_size\n        })\n    \n    return {\"uploaded_files\": uploaded_files}",
+    "category": "file-handling",
+    "difficulty": "intermediate",
+    "tags": [
+      "fastapi",
+      "file-upload",
+      "multipart"
+    ]
+  },
+  {
+    "instruction": "Create a FastAPI endpoint that sends email in background after user registration",
+    "input": "",
+    "output": "from fastapi import FastAPI, BackgroundTasks\nfrom pydantic import BaseModel, EmailStr\nimport smtplib\nfrom email.mime.text import MIMEText\n\napp = FastAPI()\n\nclass User(BaseModel):\n    email: EmailStr\n    name: str\n\ndef send_welcome_email(email: str, name: str):\n    # Email sending logic\n    msg = MIMEText(f\"Welcome {name}!\")\n    msg['Subject'] = 'Welcome to our platform'\n    msg['From'] = 'noreply@example.com'\n    msg['To'] = email\n    \n    # Send email logic here\n    print(f\"Sending email to {email}\")\n\n@app.post(\"/register\")\nasync def register_user(user: User, background_tasks: BackgroundTasks):\n    background_tasks.add_task(send_welcome_email, user.email, user.name)\n    return {\"message\": \"User registered successfully\"}",
+    "category": "background-tasks",
+    "difficulty": "advanced",
+    "tags": [
+      "fastapi",
+      "background-tasks",
+      "email"
+    ]
+  },
+  {
+    "instruction": "Create a FastAPI WebSocket endpoint for real-time chat",
+    "input": "",
+    "output": "from fastapi import FastAPI, WebSocket, WebSocketDisconnect\nfrom typing import List\n\napp = FastAPI()\n\nclass ConnectionManager:\n    def __init__(self):\n        self.active_connections: List[WebSocket] = []\n\n    async def connect(self, websocket: WebSocket):\n        await websocket.accept()\n        self.active_connections.append(websocket)\n\n    def disconnect(self, websocket: WebSocket):\n        self.active_connections.remove(websocket)\n\n    async def send_personal_message(self, message: str, websocket: WebSocket):\n        await websocket.send_text(message)\n\n    async def broadcast(self, message: str):\n        for connection in self.active_connections:\n            await connection.send_text(message)\n\nmanager = ConnectionManager()\n\n@app.websocket(\"/ws/{client_id}\")\nasync def websocket_endpoint(websocket: WebSocket, client_id: int):\n    await manager.connect(websocket)\n    try:\n        while True:\n            data = await websocket.receive_text()\n            await manager.send_personal_message(f\"You wrote: {data}\", websocket)\n            await manager.broadcast(f\"Client #{client_id} says: {data}\")\n    except WebSocketDisconnect:\n        manager.disconnect(websocket)\n        await manager.broadcast(f\"Client #{client_id} left the chat\")",
+    "category": "websocket",
+    "difficulty": "advanced",
+    "tags": [
+      "fastapi",
+      "websocket",
+      "real-time",
+      "chat"
+    ]
+  }
+]
