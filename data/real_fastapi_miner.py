@@ -55,16 +55,31 @@ class RealFastAPIMiner:
         # Storage for extracted patterns
         self.extracted_patterns: List[ExtractedPattern] = []
         
-    def search_fastapi_repositories(self, max_repos: int = 50) -> List[Dict]:
+    def search_fastapi_repositories(self, max_repos: int = 100) -> List[Dict]:
         """Search for real FastAPI repositories on GitHub."""
         self.logger.info(f"🔍 Searching for FastAPI repositories (max: {max_repos})...")
         
         search_queries = [
             "fastapi stars:>100 language:python",
-            "fastapi crud stars:>50 language:python", 
-            "fastapi example stars:>30 language:python",
-            "fastapi tutorial stars:>20 language:python",
-            "fastapi rest api stars:>50 language:python"
+            "fastapi stars:>50 language:python",
+            "fastapi stars:>20 language:python",
+            "fastapi stars:>10 language:python",
+            "fastapi stars:>5 language:python",
+            "fastapi crud stars:>10 language:python", 
+            "fastapi example stars:>5 language:python",
+            "fastapi tutorial stars:>5 language:python",
+            "fastapi rest api stars:>10 language:python",
+            "fastapi authentication stars:>5 language:python",
+            "fastapi database stars:>5 language:python",
+            "fastapi mongodb stars:>5 language:python",
+            "fastapi postgresql stars:>5 language:python",
+            "fastapi sqlalchemy stars:>5 language:python",
+            "fastapi jwt stars:>5 language:python",
+            "fastapi oauth stars:>5 language:python",
+            "fastapi websocket stars:>5 language:python",
+            "fastapi microservice stars:>5 language:python",
+            "fastapi async stars:>5 language:python",
+            "fastapi docker stars:>5 language:python"
         ]
         
         all_repos = []
@@ -78,7 +93,7 @@ class RealFastAPIMiner:
                     "q": query,
                     "sort": "stars",
                     "order": "desc",
-                    "per_page": 20
+                    "per_page": 50  # Increased from 20 to get more repos per query
                 }
                 
                 response = self.session.get(url, params=params, timeout=30)
@@ -119,16 +134,17 @@ class RealFastAPIMiner:
         if repo.get("fork", False) or repo.get("archived", False):
             return False
             
-        # Require minimum stars
-        if repo.get("stargazers_count", 0) < 5:
+        # Lowered minimum stars requirement
+        if repo.get("stargazers_count", 0) < 3:
             return False
             
         # Check for FastAPI in description or name
         description = (repo.get("description") or "").lower()
         name = repo.get("name", "").lower()
         
-        fastapi_keywords = ["fastapi", "fast api", "api", "rest", "backend"]
+        fastapi_keywords = ["fastapi", "fast api", "api", "rest", "backend", "web", "server", "microservice"]
         
+        # More lenient matching
         return any(keyword in description or keyword in name for keyword in fastapi_keywords)
     
     def mine_repository(self, repo: Dict) -> List[ExtractedPattern]:
@@ -155,13 +171,13 @@ class RealFastAPIMiner:
             
             self.logger.info(f"📁 Found {len(python_files)} potential FastAPI files")
             
-            # Process each file
-            for file_item in python_files[:10]:  # Limit to prevent rate limiting
+            # Process each file - increased limit
+            for file_item in python_files[:25]:  # Increased from 10 to 25 files per repo
                 file_patterns = self._extract_patterns_from_file(repo, file_item)
                 patterns.extend(file_patterns)
                 
-                # Rate limiting
-                time.sleep(1)
+                # Reduced rate limiting for faster processing
+                time.sleep(0.5)  # Reduced from 1 second
                 
         except requests.exceptions.RequestException as e:
             self.logger.error(f"❌ Error mining repository {repo['full_name']}: {e}")
@@ -173,15 +189,27 @@ class RealFastAPIMiner:
         """Check if file path suggests FastAPI code."""
         path_lower = file_path.lower()
         
-        # Skip test files and migrations
-        if any(skip in path_lower for skip in ["test", "migration", "__pycache__"]):
+        # Skip test files, migrations, and common non-FastAPI files
+        skip_patterns = [
+            "test", "tests", "__test__", "spec", "specs",
+            "migration", "migrations", "alembic",
+            "__pycache__", ".pyc", "venv", "env",
+            "setup.py", "conftest.py", "requirements",
+            "dockerfile", "docker", "deployment"
+        ]
+        
+        if any(skip in path_lower for skip in skip_patterns):
             return False
         
-        # Look for FastAPI-related patterns
+        # Look for FastAPI-related patterns (expanded list)
         fastapi_indicators = [
-            "main.py", "app.py", "server.py", "api.py",
-            "router", "route", "endpoint", "handler", 
-            "crud", "model", "schema", "auth"
+            "main.py", "app.py", "server.py", "api.py", "run.py",
+            "router", "routers", "route", "routes", "endpoint", "endpoints", 
+            "handler", "handlers", "controller", "controllers",
+            "crud", "model", "models", "schema", "schemas", "auth",
+            "user", "users", "admin", "service", "services",
+            "views", "resources", "middleware", "dependencies",
+            "config", "settings", "database", "db"
         ]
         
         return any(indicator in path_lower for indicator in fastapi_indicators)
@@ -233,7 +261,28 @@ class RealFastAPIMiner:
             "@app.get",
             "@app.post",
             "@app.put",
-            "@app.delete"
+            "@app.delete",
+            "@app.patch",
+            "@app.options",
+            "@router.get",
+            "@router.post",
+            "@router.put",
+            "@router.delete",
+            "@router.patch",
+            "APIRouter(",
+            "Depends(",
+            "HTTPException",
+            "BaseModel",
+            "Query(",
+            "Path(",
+            "Body(",
+            "Form(",
+            "File(",
+            "UploadFile",
+            "BackgroundTasks",
+            "WebSocket",
+            "HTTPBearer",
+            "OAuth2"
         ]
         
         return any(indicator in content for indicator in fastapi_indicators)
@@ -288,7 +337,9 @@ class RealFastAPIMiner:
         """Check if decorator is a FastAPI route decorator."""
         if isinstance(decorator, ast.Call):
             if isinstance(decorator.func, ast.Attribute):
-                return decorator.func.attr in ["get", "post", "put", "delete", "patch", "options"]
+                # Check for both app.method and router.method patterns
+                method_name = decorator.func.attr
+                return method_name in ["get", "post", "put", "delete", "patch", "options", "head", "trace"]
         return False
     
     def _get_http_method(self, decorator: ast.expr) -> str:
@@ -299,17 +350,35 @@ class RealFastAPIMiner:
     
     def _has_pydantic_validation(self, code: str) -> bool:
         """Check if code uses Pydantic validation."""
-        pydantic_indicators = ["BaseModel", "Field", "validator", "EmailStr", "constr"]
+        pydantic_indicators = [
+            "BaseModel", "Field", "validator", "EmailStr", "constr", 
+            "conint", "confloat", "conlist", "conset", "UUID", "SecretStr",
+            "HttpUrl", "AnyUrl", "Json", "validate_assignment", "root_validator",
+            "ValidationError", "Schema", "create_model"
+        ]
         return any(indicator in code for indicator in pydantic_indicators)
     
     def _has_authentication(self, code: str) -> bool:
         """Check if code uses authentication."""
-        auth_indicators = ["Depends", "HTTPBearer", "OAuth2", "jwt", "token", "auth"]
+        auth_indicators = [
+            "Depends", "HTTPBearer", "HTTPBasic", "HTTPDigest", "OAuth2", 
+            "OAuth2PasswordBearer", "OAuth2PasswordRequestForm",
+            "jwt", "token", "auth", "authenticate", "authorize", "login", "logout",
+            "SecurityScopes", "Security", "HTTPAuthorizationCredentials",
+            "APIKey", "APIKeyHeader", "APIKeyQuery", "APIKeyCookie"
+        ]
         return any(indicator in code for indicator in auth_indicators)
     
     def _has_database_usage(self, code: str) -> bool:
         """Check if code uses database."""
-        db_indicators = ["Session", "query", "db.", "database", "orm", "sqlalchemy"]
+        db_indicators = [
+            "Session", "query", "db.", "database", "orm", "sqlalchemy", 
+            "SQLAlchemy", "sessionmaker", "create_engine", "select", "insert",
+            "update", "delete", "join", "filter", "where", "order_by", "group_by",
+            "MongoDB", "pymongo", "motor", "asyncio", "AsyncSession",
+            "PostgreSQL", "MySQL", "SQLite", "Redis", "Elasticsearch",
+            "commit", "rollback", "add", "merge", "refresh", "expire"
+        ]
         return any(indicator in code for indicator in db_indicators)
     
     def _calculate_complexity(self, code: str) -> int:
@@ -473,7 +542,7 @@ class RealFastAPIMiner:
         
         return unique_examples
     
-    def mine_dataset(self, max_repos: int = 30, output_file: str = "data/fastapi_mined_dataset.json") -> List[Dict]:
+    def mine_dataset(self, max_repos: int = 100, output_file: str = "data/fastapi_mined_dataset.json") -> List[Dict]:
         """Mine complete dataset from GitHub."""
         self.logger.info("🚀 Starting FastAPI dataset mining from GitHub...")
         
@@ -490,8 +559,8 @@ class RealFastAPIMiner:
             patterns = self.mine_repository(repo)
             all_patterns.extend(patterns)
             
-            # Rate limiting between repos
-            time.sleep(2)
+            # Rate limiting between repos (reduced)
+            time.sleep(1)  # Reduced from 2 seconds
         
         self.logger.info(f"⛏️  Total patterns extracted: {len(all_patterns)}")
         
@@ -539,7 +608,7 @@ def main():
     """Main function."""
     parser = argparse.ArgumentParser(description="Mine FastAPI dataset from GitHub")
     parser.add_argument("--github_token", type=str, required=True, help="GitHub API token")
-    parser.add_argument("--max_repos", type=int, default=30, help="Maximum repositories to mine")
+    parser.add_argument("--max_repos", type=int, default=100, help="Maximum repositories to mine")
     parser.add_argument("--output", type=str, default="data/fastapi_mined_dataset.json", help="Output file path")
     
     args = parser.parse_args()
