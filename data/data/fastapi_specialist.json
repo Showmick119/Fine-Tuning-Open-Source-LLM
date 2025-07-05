@@ -86,5 +86,824 @@
       "real-time",
       "chat"
     ]
+  },
+  {
+    "instruction": "Create a complete CRUD API for managing blog posts",
+    "input": "Include endpoints for create, read, update, delete blog posts with proper validation",
+    "output": "from fastapi import FastAPI, HTTPException, Depends\nfrom pydantic import BaseModel\nfrom typing import List, Optional\nfrom sqlalchemy.orm import Session\nfrom database import SessionLocal, BlogPost\n\napp = FastAPI()\n\nclass BlogPostCreate(BaseModel):\n    title: str\n    content: str\n    author: str\n\nclass BlogPostUpdate(BaseModel):\n    title: Optional[str] = None\n    content: Optional[str] = None\n\nclass BlogPostResponse(BaseModel):\n    id: int\n    title: str\n    content: str\n    author: str\n    created_at: str\n\ndef get_db():\n    db = SessionLocal()\n    try:\n        yield db\n    finally:\n        db.close()\n\n@app.post(\"/posts\", response_model=BlogPostResponse)\nasync def create_post(post: BlogPostCreate, db: Session = Depends(get_db)):\n    db_post = BlogPost(**post.dict())\n    db.add(db_post)\n    db.commit()\n    db.refresh(db_post)\n    return db_post\n\n@app.get(\"/posts\", response_model=List[BlogPostResponse])\nasync def get_posts(db: Session = Depends(get_db)):\n    return db.query(BlogPost).all()\n\n@app.get(\"/posts/{post_id}\", response_model=BlogPostResponse)\nasync def get_post(post_id: int, db: Session = Depends(get_db)):\n    post = db.query(BlogPost).filter(BlogPost.id == post_id).first()\n    if not post:\n        raise HTTPException(status_code=404, detail=\"Post not found\")\n    return post\n\n@app.put(\"/posts/{post_id}\", response_model=BlogPostResponse)\nasync def update_post(post_id: int, post_update: BlogPostUpdate, db: Session = Depends(get_db)):\n    post = db.query(BlogPost).filter(BlogPost.id == post_id).first()\n    if not post:\n        raise HTTPException(status_code=404, detail=\"Post not found\")\n    \n    for field, value in post_update.dict(exclude_unset=True).items():\n        setattr(post, field, value)\n    \n    db.commit()\n    db.refresh(post)\n    return post\n\n@app.delete(\"/posts/{post_id}\")\nasync def delete_post(post_id: int, db: Session = Depends(get_db)):\n    post = db.query(BlogPost).filter(BlogPost.id == post_id).first()\n    if not post:\n        raise HTTPException(status_code=404, detail=\"Post not found\")\n    \n    db.delete(post)\n    db.commit()\n    return {\"message\": \"Post deleted successfully\"}",
+    "category": "crud",
+    "difficulty": "intermediate",
+    "tags": [
+      "fastapi",
+      "crud",
+      "database",
+      "validation"
+    ]
+  },
+  {
+    "instruction": "Create a FastAPI endpoint with advanced query parameters and filtering",
+    "input": "Support pagination, sorting, and filtering for a products API",
+    "output": "from fastapi import FastAPI, Query, Depends\nfrom typing import Optional, List\nfrom enum import Enum\nfrom pydantic import BaseModel\nfrom sqlalchemy.orm import Session\nfrom database import SessionLocal, Product\n\napp = FastAPI()\n\nclass SortOrder(str, Enum):\n    asc = \"asc\"\n    desc = \"desc\"\n\nclass ProductResponse(BaseModel):\n    id: int\n    name: str\n    price: float\n    category: str\n    in_stock: bool\n\ndef get_db():\n    db = SessionLocal()\n    try:\n        yield db\n    finally:\n        db.close()\n\n@app.get(\"/products\", response_model=List[ProductResponse])\nasync def get_products(\n    page: int = Query(1, ge=1, description=\"Page number\"),\n    limit: int = Query(10, ge=1, le=100, description=\"Items per page\"),\n    category: Optional[str] = Query(None, description=\"Filter by category\"),\n    min_price: Optional[float] = Query(None, ge=0, description=\"Minimum price\"),\n    max_price: Optional[float] = Query(None, ge=0, description=\"Maximum price\"),\n    in_stock: Optional[bool] = Query(None, description=\"Filter by stock status\"),\n    sort_by: str = Query(\"name\", description=\"Sort field\"),\n    sort_order: SortOrder = Query(SortOrder.asc, description=\"Sort order\"),\n    db: Session = Depends(get_db)\n):\n    query = db.query(Product)\n    \n    # Apply filters\n    if category:\n        query = query.filter(Product.category == category)\n    if min_price is not None:\n        query = query.filter(Product.price >= min_price)\n    if max_price is not None:\n        query = query.filter(Product.price <= max_price)\n    if in_stock is not None:\n        query = query.filter(Product.in_stock == in_stock)\n    \n    # Apply sorting\n    if sort_order == SortOrder.asc:\n        query = query.order_by(getattr(Product, sort_by))\n    else:\n        query = query.order_by(getattr(Product, sort_by).desc())\n    \n    # Apply pagination\n    offset = (page - 1) * limit\n    products = query.offset(offset).limit(limit).all()\n    \n    return products",
+    "category": "query-parameters",
+    "difficulty": "intermediate",
+    "tags": [
+      "fastapi",
+      "query-parameters",
+      "filtering",
+      "pagination"
+    ]
+  },
+  {
+    "instruction": "Create FastAPI middleware for request logging and CORS",
+    "input": "Add middleware to log all requests and enable CORS for frontend integration",
+    "output": "from fastapi import FastAPI, Request, Response\nfrom fastapi.middleware.cors import CORSMiddleware\nfrom fastapi.middleware.base import BaseHTTPMiddleware\nimport time\nimport logging\n\napp = FastAPI()\n\n# Configure logging\nlogging.basicConfig(level=logging.INFO)\nlogger = logging.getLogger(__name__)\n\nclass LoggingMiddleware(BaseHTTPMiddleware):\n    async def dispatch(self, request: Request, call_next):\n        start_time = time.time()\n        \n        # Log request\n        logger.info(f\"Request: {request.method} {request.url}\")\n        \n        # Process request\n        response = await call_next(request)\n        \n        # Log response\n        process_time = time.time() - start_time\n        logger.info(f\"Response: {response.status_code} - {process_time:.4f}s\")\n        \n        return response\n\n# Add CORS middleware\napp.add_middleware(\n    CORSMiddleware,\n    allow_origins=[\"http://localhost:3000\", \"https://yourdomain.com\"],\n    allow_credentials=True,\n    allow_methods=[\"*\"],\n    allow_headers=[\"*\"],\n)\n\n# Add logging middleware\napp.add_middleware(LoggingMiddleware)\n\n@app.get(\"/\")\nasync def root():\n    return {\"message\": \"Hello World\"}\n\n@app.get(\"/health\")\nasync def health_check():\n    return {\"status\": \"healthy\"}",
+    "category": "middleware",
+    "difficulty": "advanced",
+    "tags": [
+      "fastapi",
+      "middleware",
+      "cors",
+      "logging"
+    ]
+  },
+  {
+    "instruction": "Create a FastAPI GET endpoint to retrieve all users",
+    "input": "Include pagination and filtering options for users",
+    "output": "from fastapi import FastAPI, Query, Depends\nfrom typing import List, Optional\nfrom pydantic import BaseModel\nfrom sqlalchemy.orm import Session\nfrom database import SessionLocal, User\n\napp = FastAPI()\n\nclass UserResponse(BaseModel):\n    id: int\n    name: str\n    created_at: str\n    updated_at: str\n\ndef get_db():\n    db = SessionLocal()\n    try:\n        yield db\n    finally:\n        db.close()\n\n@app.get(\"/users\", response_model=List[UserResponse])\nasync def get_users(\n    skip: int = Query(0, ge=0),\n    limit: int = Query(100, ge=1, le=1000),\n    search: Optional[str] = Query(None),\n    db: Session = Depends(get_db)\n):\n    query = db.query(User)\n    \n    if search:\n        query = query.filter(User.name.ilike(f\"%{search}%\"))\n    \n    users_list = query.offset(skip).limit(limit).all()\n    return users_list",
+    "category": "endpoints",
+    "difficulty": "beginner",
+    "tags": [
+      "fastapi",
+      "get",
+      "users",
+      "pagination"
+    ]
+  },
+  {
+    "instruction": "Create a FastAPI GET endpoint to retrieve a specific user",
+    "input": "Return user details by ID with proper error handling",
+    "output": "from fastapi import FastAPI, HTTPException, Depends\nfrom pydantic import BaseModel\nfrom sqlalchemy.orm import Session\nfrom database import SessionLocal, User\n\napp = FastAPI()\n\nclass UserResponse(BaseModel):\n    id: int\n    name: str\n    description: str\n    created_at: str\n    updated_at: str\n\ndef get_db():\n    db = SessionLocal()\n    try:\n        yield db\n    finally:\n        db.close()\n\n@app.get(\"/users/{item_id}\", response_model=UserResponse)\nasync def get_user(item_id: int, db: Session = Depends(get_db)):\n    item = db.query(User).filter(User.id == item_id).first()\n    if not item:\n        raise HTTPException(status_code=404, detail=\"User not found\")\n    return item",
+    "category": "endpoints",
+    "difficulty": "beginner",
+    "tags": [
+      "fastapi",
+      "get",
+      "users",
+      "detail"
+    ]
+  },
+  {
+    "instruction": "Create a FastAPI POST endpoint to create a new user",
+    "input": "Accept user data with validation using Pydantic models",
+    "output": "from fastapi import FastAPI, HTTPException, Depends\nfrom pydantic import BaseModel, validator\nfrom sqlalchemy.orm import Session\nfrom database import SessionLocal, User\nfrom typing import Optional\n\napp = FastAPI()\n\nclass UserCreate(BaseModel):\n    name: str\n    description: Optional[str] = None\n    \n    @validator('name')\n    def validate_name(cls, v):\n        if not v or len(v.strip()) < 2:\n            raise ValueError('Name must be at least 2 characters long')\n        return v.strip()\n\nclass UserResponse(BaseModel):\n    id: int\n    name: str\n    description: Optional[str]\n    created_at: str\n\ndef get_db():\n    db = SessionLocal()\n    try:\n        yield db\n    finally:\n        db.close()\n\n@app.post(\"/users\", response_model=UserResponse)\nasync def create_user(item: UserCreate, db: Session = Depends(get_db)):\n    # Check if item already exists\n    existing = db.query(User).filter(User.name == item.name).first()\n    if existing:\n        raise HTTPException(status_code=400, detail=\"User already exists\")\n    \n    db_item = User(**item.dict())\n    db.add(db_item)\n    db.commit()\n    db.refresh(db_item)\n    return db_item",
+    "category": "endpoints",
+    "difficulty": "intermediate",
+    "tags": [
+      "fastapi",
+      "post",
+      "users",
+      "validation"
+    ]
+  },
+  {
+    "instruction": "Create a FastAPI PUT endpoint to update a user",
+    "input": "Update user with partial data support and validation",
+    "output": "from fastapi import FastAPI, HTTPException, Depends\nfrom pydantic import BaseModel, validator\nfrom sqlalchemy.orm import Session\nfrom database import SessionLocal, User\nfrom typing import Optional\n\napp = FastAPI()\n\nclass UserUpdate(BaseModel):\n    name: Optional[str] = None\n    description: Optional[str] = None\n    \n    @validator('name')\n    def validate_name(cls, v):\n        if v is not None and (not v or len(v.strip()) < 2):\n            raise ValueError('Name must be at least 2 characters long')\n        return v.strip() if v else v\n\nclass UserResponse(BaseModel):\n    id: int\n    name: str\n    description: Optional[str]\n    updated_at: str\n\ndef get_db():\n    db = SessionLocal()\n    try:\n        yield db\n    finally:\n        db.close()\n\n@app.put(\"/users/{item_id}\", response_model=UserResponse)\nasync def update_user(item_id: int, item_update: UserUpdate, db: Session = Depends(get_db)):\n    item = db.query(User).filter(User.id == item_id).first()\n    if not item:\n        raise HTTPException(status_code=404, detail=\"User not found\")\n    \n    # Update only provided fields\n    for field, value in item_update.dict(exclude_unset=True).items():\n        setattr(item, field, value)\n    \n    db.commit()\n    db.refresh(item)\n    return item",
+    "category": "endpoints",
+    "difficulty": "intermediate",
+    "tags": [
+      "fastapi",
+      "put",
+      "users",
+      "update"
+    ]
+  },
+  {
+    "instruction": "Create a FastAPI DELETE endpoint to remove a user",
+    "input": "Delete user by ID with proper error handling and confirmation",
+    "output": "from fastapi import FastAPI, HTTPException, Depends\nfrom sqlalchemy.orm import Session\nfrom database import SessionLocal, User\n\napp = FastAPI()\n\ndef get_db():\n    db = SessionLocal()\n    try:\n        yield db\n    finally:\n        db.close()\n\n@app.delete(\"/users/{item_id}\")\nasync def delete_user(item_id: int, db: Session = Depends(get_db)):\n    item = db.query(User).filter(User.id == item_id).first()\n    if not item:\n        raise HTTPException(status_code=404, detail=\"User not found\")\n    \n    # Check if item can be deleted (add business logic here)\n    # For example, check if it's referenced by other entities\n    \n    db.delete(item)\n    db.commit()\n    return {\"message\": f\"User deleted successfully\", \"deleted_id\": item_id}",
+    "category": "endpoints",
+    "difficulty": "intermediate",
+    "tags": [
+      "fastapi",
+      "delete",
+      "users",
+      "remove"
+    ]
+  },
+  {
+    "instruction": "Create a FastAPI GET endpoint to retrieve all products",
+    "input": "Include pagination and filtering options for products",
+    "output": "from fastapi import FastAPI, Query, Depends\nfrom typing import List, Optional\nfrom pydantic import BaseModel\nfrom sqlalchemy.orm import Session\nfrom database import SessionLocal, Product\n\napp = FastAPI()\n\nclass ProductResponse(BaseModel):\n    id: int\n    name: str\n    created_at: str\n    updated_at: str\n\ndef get_db():\n    db = SessionLocal()\n    try:\n        yield db\n    finally:\n        db.close()\n\n@app.get(\"/products\", response_model=List[ProductResponse])\nasync def get_products(\n    skip: int = Query(0, ge=0),\n    limit: int = Query(100, ge=1, le=1000),\n    search: Optional[str] = Query(None),\n    db: Session = Depends(get_db)\n):\n    query = db.query(Product)\n    \n    if search:\n        query = query.filter(Product.name.ilike(f\"%{search}%\"))\n    \n    products_list = query.offset(skip).limit(limit).all()\n    return products_list",
+    "category": "endpoints",
+    "difficulty": "beginner",
+    "tags": [
+      "fastapi",
+      "get",
+      "products",
+      "pagination"
+    ]
+  },
+  {
+    "instruction": "Create a FastAPI GET endpoint to retrieve a specific product",
+    "input": "Return product details by ID with proper error handling",
+    "output": "from fastapi import FastAPI, HTTPException, Depends\nfrom pydantic import BaseModel\nfrom sqlalchemy.orm import Session\nfrom database import SessionLocal, Product\n\napp = FastAPI()\n\nclass ProductResponse(BaseModel):\n    id: int\n    name: str\n    description: str\n    created_at: str\n    updated_at: str\n\ndef get_db():\n    db = SessionLocal()\n    try:\n        yield db\n    finally:\n        db.close()\n\n@app.get(\"/products/{item_id}\", response_model=ProductResponse)\nasync def get_product(item_id: int, db: Session = Depends(get_db)):\n    item = db.query(Product).filter(Product.id == item_id).first()\n    if not item:\n        raise HTTPException(status_code=404, detail=\"Product not found\")\n    return item",
+    "category": "endpoints",
+    "difficulty": "beginner",
+    "tags": [
+      "fastapi",
+      "get",
+      "products",
+      "detail"
+    ]
+  },
+  {
+    "instruction": "Create a FastAPI POST endpoint to create a new product",
+    "input": "Accept product data with validation using Pydantic models",
+    "output": "from fastapi import FastAPI, HTTPException, Depends\nfrom pydantic import BaseModel, validator\nfrom sqlalchemy.orm import Session\nfrom database import SessionLocal, Product\nfrom typing import Optional\n\napp = FastAPI()\n\nclass ProductCreate(BaseModel):\n    name: str\n    description: Optional[str] = None\n    \n    @validator('name')\n    def validate_name(cls, v):\n        if not v or len(v.strip()) < 2:\n            raise ValueError('Name must be at least 2 characters long')\n        return v.strip()\n\nclass ProductResponse(BaseModel):\n    id: int\n    name: str\n    description: Optional[str]\n    created_at: str\n\ndef get_db():\n    db = SessionLocal()\n    try:\n        yield db\n    finally:\n        db.close()\n\n@app.post(\"/products\", response_model=ProductResponse)\nasync def create_product(item: ProductCreate, db: Session = Depends(get_db)):\n    # Check if item already exists\n    existing = db.query(Product).filter(Product.name == item.name).first()\n    if existing:\n        raise HTTPException(status_code=400, detail=\"Product already exists\")\n    \n    db_item = Product(**item.dict())\n    db.add(db_item)\n    db.commit()\n    db.refresh(db_item)\n    return db_item",
+    "category": "endpoints",
+    "difficulty": "intermediate",
+    "tags": [
+      "fastapi",
+      "post",
+      "products",
+      "validation"
+    ]
+  },
+  {
+    "instruction": "Create a FastAPI PUT endpoint to update a product",
+    "input": "Update product with partial data support and validation",
+    "output": "from fastapi import FastAPI, HTTPException, Depends\nfrom pydantic import BaseModel, validator\nfrom sqlalchemy.orm import Session\nfrom database import SessionLocal, Product\nfrom typing import Optional\n\napp = FastAPI()\n\nclass ProductUpdate(BaseModel):\n    name: Optional[str] = None\n    description: Optional[str] = None\n    \n    @validator('name')\n    def validate_name(cls, v):\n        if v is not None and (not v or len(v.strip()) < 2):\n            raise ValueError('Name must be at least 2 characters long')\n        return v.strip() if v else v\n\nclass ProductResponse(BaseModel):\n    id: int\n    name: str\n    description: Optional[str]\n    updated_at: str\n\ndef get_db():\n    db = SessionLocal()\n    try:\n        yield db\n    finally:\n        db.close()\n\n@app.put(\"/products/{item_id}\", response_model=ProductResponse)\nasync def update_product(item_id: int, item_update: ProductUpdate, db: Session = Depends(get_db)):\n    item = db.query(Product).filter(Product.id == item_id).first()\n    if not item:\n        raise HTTPException(status_code=404, detail=\"Product not found\")\n    \n    # Update only provided fields\n    for field, value in item_update.dict(exclude_unset=True).items():\n        setattr(item, field, value)\n    \n    db.commit()\n    db.refresh(item)\n    return item",
+    "category": "endpoints",
+    "difficulty": "intermediate",
+    "tags": [
+      "fastapi",
+      "put",
+      "products",
+      "update"
+    ]
+  },
+  {
+    "instruction": "Create a FastAPI DELETE endpoint to remove a product",
+    "input": "Delete product by ID with proper error handling and confirmation",
+    "output": "from fastapi import FastAPI, HTTPException, Depends\nfrom sqlalchemy.orm import Session\nfrom database import SessionLocal, Product\n\napp = FastAPI()\n\ndef get_db():\n    db = SessionLocal()\n    try:\n        yield db\n    finally:\n        db.close()\n\n@app.delete(\"/products/{item_id}\")\nasync def delete_product(item_id: int, db: Session = Depends(get_db)):\n    item = db.query(Product).filter(Product.id == item_id).first()\n    if not item:\n        raise HTTPException(status_code=404, detail=\"Product not found\")\n    \n    # Check if item can be deleted (add business logic here)\n    # For example, check if it's referenced by other entities\n    \n    db.delete(item)\n    db.commit()\n    return {\"message\": f\"Product deleted successfully\", \"deleted_id\": item_id}",
+    "category": "endpoints",
+    "difficulty": "intermediate",
+    "tags": [
+      "fastapi",
+      "delete",
+      "products",
+      "remove"
+    ]
+  },
+  {
+    "instruction": "Create a FastAPI GET endpoint to retrieve all orders",
+    "input": "Include pagination and filtering options for orders",
+    "output": "from fastapi import FastAPI, Query, Depends\nfrom typing import List, Optional\nfrom pydantic import BaseModel\nfrom sqlalchemy.orm import Session\nfrom database import SessionLocal, Order\n\napp = FastAPI()\n\nclass OrderResponse(BaseModel):\n    id: int\n    name: str\n    created_at: str\n    updated_at: str\n\ndef get_db():\n    db = SessionLocal()\n    try:\n        yield db\n    finally:\n        db.close()\n\n@app.get(\"/orders\", response_model=List[OrderResponse])\nasync def get_orders(\n    skip: int = Query(0, ge=0),\n    limit: int = Query(100, ge=1, le=1000),\n    search: Optional[str] = Query(None),\n    db: Session = Depends(get_db)\n):\n    query = db.query(Order)\n    \n    if search:\n        query = query.filter(Order.name.ilike(f\"%{search}%\"))\n    \n    orders_list = query.offset(skip).limit(limit).all()\n    return orders_list",
+    "category": "endpoints",
+    "difficulty": "beginner",
+    "tags": [
+      "fastapi",
+      "get",
+      "orders",
+      "pagination"
+    ]
+  },
+  {
+    "instruction": "Create a FastAPI GET endpoint to retrieve a specific order",
+    "input": "Return order details by ID with proper error handling",
+    "output": "from fastapi import FastAPI, HTTPException, Depends\nfrom pydantic import BaseModel\nfrom sqlalchemy.orm import Session\nfrom database import SessionLocal, Order\n\napp = FastAPI()\n\nclass OrderResponse(BaseModel):\n    id: int\n    name: str\n    description: str\n    created_at: str\n    updated_at: str\n\ndef get_db():\n    db = SessionLocal()\n    try:\n        yield db\n    finally:\n        db.close()\n\n@app.get(\"/orders/{item_id}\", response_model=OrderResponse)\nasync def get_order(item_id: int, db: Session = Depends(get_db)):\n    item = db.query(Order).filter(Order.id == item_id).first()\n    if not item:\n        raise HTTPException(status_code=404, detail=\"Order not found\")\n    return item",
+    "category": "endpoints",
+    "difficulty": "beginner",
+    "tags": [
+      "fastapi",
+      "get",
+      "orders",
+      "detail"
+    ]
+  },
+  {
+    "instruction": "Create a FastAPI POST endpoint to create a new order",
+    "input": "Accept order data with validation using Pydantic models",
+    "output": "from fastapi import FastAPI, HTTPException, Depends\nfrom pydantic import BaseModel, validator\nfrom sqlalchemy.orm import Session\nfrom database import SessionLocal, Order\nfrom typing import Optional\n\napp = FastAPI()\n\nclass OrderCreate(BaseModel):\n    name: str\n    description: Optional[str] = None\n    \n    @validator('name')\n    def validate_name(cls, v):\n        if not v or len(v.strip()) < 2:\n            raise ValueError('Name must be at least 2 characters long')\n        return v.strip()\n\nclass OrderResponse(BaseModel):\n    id: int\n    name: str\n    description: Optional[str]\n    created_at: str\n\ndef get_db():\n    db = SessionLocal()\n    try:\n        yield db\n    finally:\n        db.close()\n\n@app.post(\"/orders\", response_model=OrderResponse)\nasync def create_order(item: OrderCreate, db: Session = Depends(get_db)):\n    # Check if item already exists\n    existing = db.query(Order).filter(Order.name == item.name).first()\n    if existing:\n        raise HTTPException(status_code=400, detail=\"Order already exists\")\n    \n    db_item = Order(**item.dict())\n    db.add(db_item)\n    db.commit()\n    db.refresh(db_item)\n    return db_item",
+    "category": "endpoints",
+    "difficulty": "intermediate",
+    "tags": [
+      "fastapi",
+      "post",
+      "orders",
+      "validation"
+    ]
+  },
+  {
+    "instruction": "Create a FastAPI PUT endpoint to update a order",
+    "input": "Update order with partial data support and validation",
+    "output": "from fastapi import FastAPI, HTTPException, Depends\nfrom pydantic import BaseModel, validator\nfrom sqlalchemy.orm import Session\nfrom database import SessionLocal, Order\nfrom typing import Optional\n\napp = FastAPI()\n\nclass OrderUpdate(BaseModel):\n    name: Optional[str] = None\n    description: Optional[str] = None\n    \n    @validator('name')\n    def validate_name(cls, v):\n        if v is not None and (not v or len(v.strip()) < 2):\n            raise ValueError('Name must be at least 2 characters long')\n        return v.strip() if v else v\n\nclass OrderResponse(BaseModel):\n    id: int\n    name: str\n    description: Optional[str]\n    updated_at: str\n\ndef get_db():\n    db = SessionLocal()\n    try:\n        yield db\n    finally:\n        db.close()\n\n@app.put(\"/orders/{item_id}\", response_model=OrderResponse)\nasync def update_order(item_id: int, item_update: OrderUpdate, db: Session = Depends(get_db)):\n    item = db.query(Order).filter(Order.id == item_id).first()\n    if not item:\n        raise HTTPException(status_code=404, detail=\"Order not found\")\n    \n    # Update only provided fields\n    for field, value in item_update.dict(exclude_unset=True).items():\n        setattr(item, field, value)\n    \n    db.commit()\n    db.refresh(item)\n    return item",
+    "category": "endpoints",
+    "difficulty": "intermediate",
+    "tags": [
+      "fastapi",
+      "put",
+      "orders",
+      "update"
+    ]
+  },
+  {
+    "instruction": "Create a FastAPI DELETE endpoint to remove a order",
+    "input": "Delete order by ID with proper error handling and confirmation",
+    "output": "from fastapi import FastAPI, HTTPException, Depends\nfrom sqlalchemy.orm import Session\nfrom database import SessionLocal, Order\n\napp = FastAPI()\n\ndef get_db():\n    db = SessionLocal()\n    try:\n        yield db\n    finally:\n        db.close()\n\n@app.delete(\"/orders/{item_id}\")\nasync def delete_order(item_id: int, db: Session = Depends(get_db)):\n    item = db.query(Order).filter(Order.id == item_id).first()\n    if not item:\n        raise HTTPException(status_code=404, detail=\"Order not found\")\n    \n    # Check if item can be deleted (add business logic here)\n    # For example, check if it's referenced by other entities\n    \n    db.delete(item)\n    db.commit()\n    return {\"message\": f\"Order deleted successfully\", \"deleted_id\": item_id}",
+    "category": "endpoints",
+    "difficulty": "intermediate",
+    "tags": [
+      "fastapi",
+      "delete",
+      "orders",
+      "remove"
+    ]
+  },
+  {
+    "instruction": "Create a FastAPI GET endpoint to retrieve all posts",
+    "input": "Include pagination and filtering options for posts",
+    "output": "from fastapi import FastAPI, Query, Depends\nfrom typing import List, Optional\nfrom pydantic import BaseModel\nfrom sqlalchemy.orm import Session\nfrom database import SessionLocal, Post\n\napp = FastAPI()\n\nclass PostResponse(BaseModel):\n    id: int\n    name: str\n    created_at: str\n    updated_at: str\n\ndef get_db():\n    db = SessionLocal()\n    try:\n        yield db\n    finally:\n        db.close()\n\n@app.get(\"/posts\", response_model=List[PostResponse])\nasync def get_posts(\n    skip: int = Query(0, ge=0),\n    limit: int = Query(100, ge=1, le=1000),\n    search: Optional[str] = Query(None),\n    db: Session = Depends(get_db)\n):\n    query = db.query(Post)\n    \n    if search:\n        query = query.filter(Post.name.ilike(f\"%{search}%\"))\n    \n    posts_list = query.offset(skip).limit(limit).all()\n    return posts_list",
+    "category": "endpoints",
+    "difficulty": "beginner",
+    "tags": [
+      "fastapi",
+      "get",
+      "posts",
+      "pagination"
+    ]
+  },
+  {
+    "instruction": "Create a FastAPI GET endpoint to retrieve a specific post",
+    "input": "Return post details by ID with proper error handling",
+    "output": "from fastapi import FastAPI, HTTPException, Depends\nfrom pydantic import BaseModel\nfrom sqlalchemy.orm import Session\nfrom database import SessionLocal, Post\n\napp = FastAPI()\n\nclass PostResponse(BaseModel):\n    id: int\n    name: str\n    description: str\n    created_at: str\n    updated_at: str\n\ndef get_db():\n    db = SessionLocal()\n    try:\n        yield db\n    finally:\n        db.close()\n\n@app.get(\"/posts/{item_id}\", response_model=PostResponse)\nasync def get_post(item_id: int, db: Session = Depends(get_db)):\n    item = db.query(Post).filter(Post.id == item_id).first()\n    if not item:\n        raise HTTPException(status_code=404, detail=\"Post not found\")\n    return item",
+    "category": "endpoints",
+    "difficulty": "beginner",
+    "tags": [
+      "fastapi",
+      "get",
+      "posts",
+      "detail"
+    ]
+  },
+  {
+    "instruction": "Create a FastAPI POST endpoint to create a new post",
+    "input": "Accept post data with validation using Pydantic models",
+    "output": "from fastapi import FastAPI, HTTPException, Depends\nfrom pydantic import BaseModel, validator\nfrom sqlalchemy.orm import Session\nfrom database import SessionLocal, Post\nfrom typing import Optional\n\napp = FastAPI()\n\nclass PostCreate(BaseModel):\n    name: str\n    description: Optional[str] = None\n    \n    @validator('name')\n    def validate_name(cls, v):\n        if not v or len(v.strip()) < 2:\n            raise ValueError('Name must be at least 2 characters long')\n        return v.strip()\n\nclass PostResponse(BaseModel):\n    id: int\n    name: str\n    description: Optional[str]\n    created_at: str\n\ndef get_db():\n    db = SessionLocal()\n    try:\n        yield db\n    finally:\n        db.close()\n\n@app.post(\"/posts\", response_model=PostResponse)\nasync def create_post(item: PostCreate, db: Session = Depends(get_db)):\n    # Check if item already exists\n    existing = db.query(Post).filter(Post.name == item.name).first()\n    if existing:\n        raise HTTPException(status_code=400, detail=\"Post already exists\")\n    \n    db_item = Post(**item.dict())\n    db.add(db_item)\n    db.commit()\n    db.refresh(db_item)\n    return db_item",
+    "category": "endpoints",
+    "difficulty": "intermediate",
+    "tags": [
+      "fastapi",
+      "post",
+      "posts",
+      "validation"
+    ]
+  },
+  {
+    "instruction": "Create a FastAPI PUT endpoint to update a post",
+    "input": "Update post with partial data support and validation",
+    "output": "from fastapi import FastAPI, HTTPException, Depends\nfrom pydantic import BaseModel, validator\nfrom sqlalchemy.orm import Session\nfrom database import SessionLocal, Post\nfrom typing import Optional\n\napp = FastAPI()\n\nclass PostUpdate(BaseModel):\n    name: Optional[str] = None\n    description: Optional[str] = None\n    \n    @validator('name')\n    def validate_name(cls, v):\n        if v is not None and (not v or len(v.strip()) < 2):\n            raise ValueError('Name must be at least 2 characters long')\n        return v.strip() if v else v\n\nclass PostResponse(BaseModel):\n    id: int\n    name: str\n    description: Optional[str]\n    updated_at: str\n\ndef get_db():\n    db = SessionLocal()\n    try:\n        yield db\n    finally:\n        db.close()\n\n@app.put(\"/posts/{item_id}\", response_model=PostResponse)\nasync def update_post(item_id: int, item_update: PostUpdate, db: Session = Depends(get_db)):\n    item = db.query(Post).filter(Post.id == item_id).first()\n    if not item:\n        raise HTTPException(status_code=404, detail=\"Post not found\")\n    \n    # Update only provided fields\n    for field, value in item_update.dict(exclude_unset=True).items():\n        setattr(item, field, value)\n    \n    db.commit()\n    db.refresh(item)\n    return item",
+    "category": "endpoints",
+    "difficulty": "intermediate",
+    "tags": [
+      "fastapi",
+      "put",
+      "posts",
+      "update"
+    ]
+  },
+  {
+    "instruction": "Create a FastAPI DELETE endpoint to remove a post",
+    "input": "Delete post by ID with proper error handling and confirmation",
+    "output": "from fastapi import FastAPI, HTTPException, Depends\nfrom sqlalchemy.orm import Session\nfrom database import SessionLocal, Post\n\napp = FastAPI()\n\ndef get_db():\n    db = SessionLocal()\n    try:\n        yield db\n    finally:\n        db.close()\n\n@app.delete(\"/posts/{item_id}\")\nasync def delete_post(item_id: int, db: Session = Depends(get_db)):\n    item = db.query(Post).filter(Post.id == item_id).first()\n    if not item:\n        raise HTTPException(status_code=404, detail=\"Post not found\")\n    \n    # Check if item can be deleted (add business logic here)\n    # For example, check if it's referenced by other entities\n    \n    db.delete(item)\n    db.commit()\n    return {\"message\": f\"Post deleted successfully\", \"deleted_id\": item_id}",
+    "category": "endpoints",
+    "difficulty": "intermediate",
+    "tags": [
+      "fastapi",
+      "delete",
+      "posts",
+      "remove"
+    ]
+  },
+  {
+    "instruction": "Create a FastAPI GET endpoint to retrieve all comments",
+    "input": "Include pagination and filtering options for comments",
+    "output": "from fastapi import FastAPI, Query, Depends\nfrom typing import List, Optional\nfrom pydantic import BaseModel\nfrom sqlalchemy.orm import Session\nfrom database import SessionLocal, Comment\n\napp = FastAPI()\n\nclass CommentResponse(BaseModel):\n    id: int\n    name: str\n    created_at: str\n    updated_at: str\n\ndef get_db():\n    db = SessionLocal()\n    try:\n        yield db\n    finally:\n        db.close()\n\n@app.get(\"/comments\", response_model=List[CommentResponse])\nasync def get_comments(\n    skip: int = Query(0, ge=0),\n    limit: int = Query(100, ge=1, le=1000),\n    search: Optional[str] = Query(None),\n    db: Session = Depends(get_db)\n):\n    query = db.query(Comment)\n    \n    if search:\n        query = query.filter(Comment.name.ilike(f\"%{search}%\"))\n    \n    comments_list = query.offset(skip).limit(limit).all()\n    return comments_list",
+    "category": "endpoints",
+    "difficulty": "beginner",
+    "tags": [
+      "fastapi",
+      "get",
+      "comments",
+      "pagination"
+    ]
+  },
+  {
+    "instruction": "Create a FastAPI GET endpoint to retrieve a specific comment",
+    "input": "Return comment details by ID with proper error handling",
+    "output": "from fastapi import FastAPI, HTTPException, Depends\nfrom pydantic import BaseModel\nfrom sqlalchemy.orm import Session\nfrom database import SessionLocal, Comment\n\napp = FastAPI()\n\nclass CommentResponse(BaseModel):\n    id: int\n    name: str\n    description: str\n    created_at: str\n    updated_at: str\n\ndef get_db():\n    db = SessionLocal()\n    try:\n        yield db\n    finally:\n        db.close()\n\n@app.get(\"/comments/{item_id}\", response_model=CommentResponse)\nasync def get_comment(item_id: int, db: Session = Depends(get_db)):\n    item = db.query(Comment).filter(Comment.id == item_id).first()\n    if not item:\n        raise HTTPException(status_code=404, detail=\"Comment not found\")\n    return item",
+    "category": "endpoints",
+    "difficulty": "beginner",
+    "tags": [
+      "fastapi",
+      "get",
+      "comments",
+      "detail"
+    ]
+  },
+  {
+    "instruction": "Create a FastAPI POST endpoint to create a new comment",
+    "input": "Accept comment data with validation using Pydantic models",
+    "output": "from fastapi import FastAPI, HTTPException, Depends\nfrom pydantic import BaseModel, validator\nfrom sqlalchemy.orm import Session\nfrom database import SessionLocal, Comment\nfrom typing import Optional\n\napp = FastAPI()\n\nclass CommentCreate(BaseModel):\n    name: str\n    description: Optional[str] = None\n    \n    @validator('name')\n    def validate_name(cls, v):\n        if not v or len(v.strip()) < 2:\n            raise ValueError('Name must be at least 2 characters long')\n        return v.strip()\n\nclass CommentResponse(BaseModel):\n    id: int\n    name: str\n    description: Optional[str]\n    created_at: str\n\ndef get_db():\n    db = SessionLocal()\n    try:\n        yield db\n    finally:\n        db.close()\n\n@app.post(\"/comments\", response_model=CommentResponse)\nasync def create_comment(item: CommentCreate, db: Session = Depends(get_db)):\n    # Check if item already exists\n    existing = db.query(Comment).filter(Comment.name == item.name).first()\n    if existing:\n        raise HTTPException(status_code=400, detail=\"Comment already exists\")\n    \n    db_item = Comment(**item.dict())\n    db.add(db_item)\n    db.commit()\n    db.refresh(db_item)\n    return db_item",
+    "category": "endpoints",
+    "difficulty": "intermediate",
+    "tags": [
+      "fastapi",
+      "post",
+      "comments",
+      "validation"
+    ]
+  },
+  {
+    "instruction": "Create a FastAPI PUT endpoint to update a comment",
+    "input": "Update comment with partial data support and validation",
+    "output": "from fastapi import FastAPI, HTTPException, Depends\nfrom pydantic import BaseModel, validator\nfrom sqlalchemy.orm import Session\nfrom database import SessionLocal, Comment\nfrom typing import Optional\n\napp = FastAPI()\n\nclass CommentUpdate(BaseModel):\n    name: Optional[str] = None\n    description: Optional[str] = None\n    \n    @validator('name')\n    def validate_name(cls, v):\n        if v is not None and (not v or len(v.strip()) < 2):\n            raise ValueError('Name must be at least 2 characters long')\n        return v.strip() if v else v\n\nclass CommentResponse(BaseModel):\n    id: int\n    name: str\n    description: Optional[str]\n    updated_at: str\n\ndef get_db():\n    db = SessionLocal()\n    try:\n        yield db\n    finally:\n        db.close()\n\n@app.put(\"/comments/{item_id}\", response_model=CommentResponse)\nasync def update_comment(item_id: int, item_update: CommentUpdate, db: Session = Depends(get_db)):\n    item = db.query(Comment).filter(Comment.id == item_id).first()\n    if not item:\n        raise HTTPException(status_code=404, detail=\"Comment not found\")\n    \n    # Update only provided fields\n    for field, value in item_update.dict(exclude_unset=True).items():\n        setattr(item, field, value)\n    \n    db.commit()\n    db.refresh(item)\n    return item",
+    "category": "endpoints",
+    "difficulty": "intermediate",
+    "tags": [
+      "fastapi",
+      "put",
+      "comments",
+      "update"
+    ]
+  },
+  {
+    "instruction": "Create a FastAPI DELETE endpoint to remove a comment",
+    "input": "Delete comment by ID with proper error handling and confirmation",
+    "output": "from fastapi import FastAPI, HTTPException, Depends\nfrom sqlalchemy.orm import Session\nfrom database import SessionLocal, Comment\n\napp = FastAPI()\n\ndef get_db():\n    db = SessionLocal()\n    try:\n        yield db\n    finally:\n        db.close()\n\n@app.delete(\"/comments/{item_id}\")\nasync def delete_comment(item_id: int, db: Session = Depends(get_db)):\n    item = db.query(Comment).filter(Comment.id == item_id).first()\n    if not item:\n        raise HTTPException(status_code=404, detail=\"Comment not found\")\n    \n    # Check if item can be deleted (add business logic here)\n    # For example, check if it's referenced by other entities\n    \n    db.delete(item)\n    db.commit()\n    return {\"message\": f\"Comment deleted successfully\", \"deleted_id\": item_id}",
+    "category": "endpoints",
+    "difficulty": "intermediate",
+    "tags": [
+      "fastapi",
+      "delete",
+      "comments",
+      "remove"
+    ]
+  },
+  {
+    "instruction": "Create a FastAPI GET endpoint to retrieve all categories",
+    "input": "Include pagination and filtering options for categories",
+    "output": "from fastapi import FastAPI, Query, Depends\nfrom typing import List, Optional\nfrom pydantic import BaseModel\nfrom sqlalchemy.orm import Session\nfrom database import SessionLocal, Category\n\napp = FastAPI()\n\nclass CategoryResponse(BaseModel):\n    id: int\n    name: str\n    created_at: str\n    updated_at: str\n\ndef get_db():\n    db = SessionLocal()\n    try:\n        yield db\n    finally:\n        db.close()\n\n@app.get(\"/categories\", response_model=List[CategoryResponse])\nasync def get_categories(\n    skip: int = Query(0, ge=0),\n    limit: int = Query(100, ge=1, le=1000),\n    search: Optional[str] = Query(None),\n    db: Session = Depends(get_db)\n):\n    query = db.query(Category)\n    \n    if search:\n        query = query.filter(Category.name.ilike(f\"%{search}%\"))\n    \n    categories_list = query.offset(skip).limit(limit).all()\n    return categories_list",
+    "category": "endpoints",
+    "difficulty": "beginner",
+    "tags": [
+      "fastapi",
+      "get",
+      "categories",
+      "pagination"
+    ]
+  },
+  {
+    "instruction": "Create a FastAPI GET endpoint to retrieve a specific categorie",
+    "input": "Return categorie details by ID with proper error handling",
+    "output": "from fastapi import FastAPI, HTTPException, Depends\nfrom pydantic import BaseModel\nfrom sqlalchemy.orm import Session\nfrom database import SessionLocal, Category\n\napp = FastAPI()\n\nclass CategoryResponse(BaseModel):\n    id: int\n    name: str\n    description: str\n    created_at: str\n    updated_at: str\n\ndef get_db():\n    db = SessionLocal()\n    try:\n        yield db\n    finally:\n        db.close()\n\n@app.get(\"/categories/{item_id}\", response_model=CategoryResponse)\nasync def get_categorie(item_id: int, db: Session = Depends(get_db)):\n    item = db.query(Category).filter(Category.id == item_id).first()\n    if not item:\n        raise HTTPException(status_code=404, detail=\"Category not found\")\n    return item",
+    "category": "endpoints",
+    "difficulty": "beginner",
+    "tags": [
+      "fastapi",
+      "get",
+      "categories",
+      "detail"
+    ]
+  },
+  {
+    "instruction": "Create a FastAPI POST endpoint to create a new categorie",
+    "input": "Accept categorie data with validation using Pydantic models",
+    "output": "from fastapi import FastAPI, HTTPException, Depends\nfrom pydantic import BaseModel, validator\nfrom sqlalchemy.orm import Session\nfrom database import SessionLocal, Category\nfrom typing import Optional\n\napp = FastAPI()\n\nclass CategoryCreate(BaseModel):\n    name: str\n    description: Optional[str] = None\n    \n    @validator('name')\n    def validate_name(cls, v):\n        if not v or len(v.strip()) < 2:\n            raise ValueError('Name must be at least 2 characters long')\n        return v.strip()\n\nclass CategoryResponse(BaseModel):\n    id: int\n    name: str\n    description: Optional[str]\n    created_at: str\n\ndef get_db():\n    db = SessionLocal()\n    try:\n        yield db\n    finally:\n        db.close()\n\n@app.post(\"/categories\", response_model=CategoryResponse)\nasync def create_categorie(item: CategoryCreate, db: Session = Depends(get_db)):\n    # Check if item already exists\n    existing = db.query(Category).filter(Category.name == item.name).first()\n    if existing:\n        raise HTTPException(status_code=400, detail=\"Category already exists\")\n    \n    db_item = Category(**item.dict())\n    db.add(db_item)\n    db.commit()\n    db.refresh(db_item)\n    return db_item",
+    "category": "endpoints",
+    "difficulty": "intermediate",
+    "tags": [
+      "fastapi",
+      "post",
+      "categories",
+      "validation"
+    ]
+  },
+  {
+    "instruction": "Create a FastAPI PUT endpoint to update a categorie",
+    "input": "Update categorie with partial data support and validation",
+    "output": "from fastapi import FastAPI, HTTPException, Depends\nfrom pydantic import BaseModel, validator\nfrom sqlalchemy.orm import Session\nfrom database import SessionLocal, Category\nfrom typing import Optional\n\napp = FastAPI()\n\nclass CategoryUpdate(BaseModel):\n    name: Optional[str] = None\n    description: Optional[str] = None\n    \n    @validator('name')\n    def validate_name(cls, v):\n        if v is not None and (not v or len(v.strip()) < 2):\n            raise ValueError('Name must be at least 2 characters long')\n        return v.strip() if v else v\n\nclass CategoryResponse(BaseModel):\n    id: int\n    name: str\n    description: Optional[str]\n    updated_at: str\n\ndef get_db():\n    db = SessionLocal()\n    try:\n        yield db\n    finally:\n        db.close()\n\n@app.put(\"/categories/{item_id}\", response_model=CategoryResponse)\nasync def update_categorie(item_id: int, item_update: CategoryUpdate, db: Session = Depends(get_db)):\n    item = db.query(Category).filter(Category.id == item_id).first()\n    if not item:\n        raise HTTPException(status_code=404, detail=\"Category not found\")\n    \n    # Update only provided fields\n    for field, value in item_update.dict(exclude_unset=True).items():\n        setattr(item, field, value)\n    \n    db.commit()\n    db.refresh(item)\n    return item",
+    "category": "endpoints",
+    "difficulty": "intermediate",
+    "tags": [
+      "fastapi",
+      "put",
+      "categories",
+      "update"
+    ]
+  },
+  {
+    "instruction": "Create a FastAPI DELETE endpoint to remove a categorie",
+    "input": "Delete categorie by ID with proper error handling and confirmation",
+    "output": "from fastapi import FastAPI, HTTPException, Depends\nfrom sqlalchemy.orm import Session\nfrom database import SessionLocal, Category\n\napp = FastAPI()\n\ndef get_db():\n    db = SessionLocal()\n    try:\n        yield db\n    finally:\n        db.close()\n\n@app.delete(\"/categories/{item_id}\")\nasync def delete_categorie(item_id: int, db: Session = Depends(get_db)):\n    item = db.query(Category).filter(Category.id == item_id).first()\n    if not item:\n        raise HTTPException(status_code=404, detail=\"Category not found\")\n    \n    # Check if item can be deleted (add business logic here)\n    # For example, check if it's referenced by other entities\n    \n    db.delete(item)\n    db.commit()\n    return {\"message\": f\"Category deleted successfully\", \"deleted_id\": item_id}",
+    "category": "endpoints",
+    "difficulty": "intermediate",
+    "tags": [
+      "fastapi",
+      "delete",
+      "categories",
+      "remove"
+    ]
+  },
+  {
+    "instruction": "Create a FastAPI GET endpoint to retrieve all reviews",
+    "input": "Include pagination and filtering options for reviews",
+    "output": "from fastapi import FastAPI, Query, Depends\nfrom typing import List, Optional\nfrom pydantic import BaseModel\nfrom sqlalchemy.orm import Session\nfrom database import SessionLocal, Review\n\napp = FastAPI()\n\nclass ReviewResponse(BaseModel):\n    id: int\n    name: str\n    created_at: str\n    updated_at: str\n\ndef get_db():\n    db = SessionLocal()\n    try:\n        yield db\n    finally:\n        db.close()\n\n@app.get(\"/reviews\", response_model=List[ReviewResponse])\nasync def get_reviews(\n    skip: int = Query(0, ge=0),\n    limit: int = Query(100, ge=1, le=1000),\n    search: Optional[str] = Query(None),\n    db: Session = Depends(get_db)\n):\n    query = db.query(Review)\n    \n    if search:\n        query = query.filter(Review.name.ilike(f\"%{search}%\"))\n    \n    reviews_list = query.offset(skip).limit(limit).all()\n    return reviews_list",
+    "category": "endpoints",
+    "difficulty": "beginner",
+    "tags": [
+      "fastapi",
+      "get",
+      "reviews",
+      "pagination"
+    ]
+  },
+  {
+    "instruction": "Create a FastAPI GET endpoint to retrieve a specific review",
+    "input": "Return review details by ID with proper error handling",
+    "output": "from fastapi import FastAPI, HTTPException, Depends\nfrom pydantic import BaseModel\nfrom sqlalchemy.orm import Session\nfrom database import SessionLocal, Review\n\napp = FastAPI()\n\nclass ReviewResponse(BaseModel):\n    id: int\n    name: str\n    description: str\n    created_at: str\n    updated_at: str\n\ndef get_db():\n    db = SessionLocal()\n    try:\n        yield db\n    finally:\n        db.close()\n\n@app.get(\"/reviews/{item_id}\", response_model=ReviewResponse)\nasync def get_review(item_id: int, db: Session = Depends(get_db)):\n    item = db.query(Review).filter(Review.id == item_id).first()\n    if not item:\n        raise HTTPException(status_code=404, detail=\"Review not found\")\n    return item",
+    "category": "endpoints",
+    "difficulty": "beginner",
+    "tags": [
+      "fastapi",
+      "get",
+      "reviews",
+      "detail"
+    ]
+  },
+  {
+    "instruction": "Create a FastAPI POST endpoint to create a new review",
+    "input": "Accept review data with validation using Pydantic models",
+    "output": "from fastapi import FastAPI, HTTPException, Depends\nfrom pydantic import BaseModel, validator\nfrom sqlalchemy.orm import Session\nfrom database import SessionLocal, Review\nfrom typing import Optional\n\napp = FastAPI()\n\nclass ReviewCreate(BaseModel):\n    name: str\n    description: Optional[str] = None\n    \n    @validator('name')\n    def validate_name(cls, v):\n        if not v or len(v.strip()) < 2:\n            raise ValueError('Name must be at least 2 characters long')\n        return v.strip()\n\nclass ReviewResponse(BaseModel):\n    id: int\n    name: str\n    description: Optional[str]\n    created_at: str\n\ndef get_db():\n    db = SessionLocal()\n    try:\n        yield db\n    finally:\n        db.close()\n\n@app.post(\"/reviews\", response_model=ReviewResponse)\nasync def create_review(item: ReviewCreate, db: Session = Depends(get_db)):\n    # Check if item already exists\n    existing = db.query(Review).filter(Review.name == item.name).first()\n    if existing:\n        raise HTTPException(status_code=400, detail=\"Review already exists\")\n    \n    db_item = Review(**item.dict())\n    db.add(db_item)\n    db.commit()\n    db.refresh(db_item)\n    return db_item",
+    "category": "endpoints",
+    "difficulty": "intermediate",
+    "tags": [
+      "fastapi",
+      "post",
+      "reviews",
+      "validation"
+    ]
+  },
+  {
+    "instruction": "Create a FastAPI PUT endpoint to update a review",
+    "input": "Update review with partial data support and validation",
+    "output": "from fastapi import FastAPI, HTTPException, Depends\nfrom pydantic import BaseModel, validator\nfrom sqlalchemy.orm import Session\nfrom database import SessionLocal, Review\nfrom typing import Optional\n\napp = FastAPI()\n\nclass ReviewUpdate(BaseModel):\n    name: Optional[str] = None\n    description: Optional[str] = None\n    \n    @validator('name')\n    def validate_name(cls, v):\n        if v is not None and (not v or len(v.strip()) < 2):\n            raise ValueError('Name must be at least 2 characters long')\n        return v.strip() if v else v\n\nclass ReviewResponse(BaseModel):\n    id: int\n    name: str\n    description: Optional[str]\n    updated_at: str\n\ndef get_db():\n    db = SessionLocal()\n    try:\n        yield db\n    finally:\n        db.close()\n\n@app.put(\"/reviews/{item_id}\", response_model=ReviewResponse)\nasync def update_review(item_id: int, item_update: ReviewUpdate, db: Session = Depends(get_db)):\n    item = db.query(Review).filter(Review.id == item_id).first()\n    if not item:\n        raise HTTPException(status_code=404, detail=\"Review not found\")\n    \n    # Update only provided fields\n    for field, value in item_update.dict(exclude_unset=True).items():\n        setattr(item, field, value)\n    \n    db.commit()\n    db.refresh(item)\n    return item",
+    "category": "endpoints",
+    "difficulty": "intermediate",
+    "tags": [
+      "fastapi",
+      "put",
+      "reviews",
+      "update"
+    ]
+  },
+  {
+    "instruction": "Create a FastAPI DELETE endpoint to remove a review",
+    "input": "Delete review by ID with proper error handling and confirmation",
+    "output": "from fastapi import FastAPI, HTTPException, Depends\nfrom sqlalchemy.orm import Session\nfrom database import SessionLocal, Review\n\napp = FastAPI()\n\ndef get_db():\n    db = SessionLocal()\n    try:\n        yield db\n    finally:\n        db.close()\n\n@app.delete(\"/reviews/{item_id}\")\nasync def delete_review(item_id: int, db: Session = Depends(get_db)):\n    item = db.query(Review).filter(Review.id == item_id).first()\n    if not item:\n        raise HTTPException(status_code=404, detail=\"Review not found\")\n    \n    # Check if item can be deleted (add business logic here)\n    # For example, check if it's referenced by other entities\n    \n    db.delete(item)\n    db.commit()\n    return {\"message\": f\"Review deleted successfully\", \"deleted_id\": item_id}",
+    "category": "endpoints",
+    "difficulty": "intermediate",
+    "tags": [
+      "fastapi",
+      "delete",
+      "reviews",
+      "remove"
+    ]
+  },
+  {
+    "instruction": "Create a FastAPI GET endpoint to retrieve all notifications",
+    "input": "Include pagination and filtering options for notifications",
+    "output": "from fastapi import FastAPI, Query, Depends\nfrom typing import List, Optional\nfrom pydantic import BaseModel\nfrom sqlalchemy.orm import Session\nfrom database import SessionLocal, Notification\n\napp = FastAPI()\n\nclass NotificationResponse(BaseModel):\n    id: int\n    name: str\n    created_at: str\n    updated_at: str\n\ndef get_db():\n    db = SessionLocal()\n    try:\n        yield db\n    finally:\n        db.close()\n\n@app.get(\"/notifications\", response_model=List[NotificationResponse])\nasync def get_notifications(\n    skip: int = Query(0, ge=0),\n    limit: int = Query(100, ge=1, le=1000),\n    search: Optional[str] = Query(None),\n    db: Session = Depends(get_db)\n):\n    query = db.query(Notification)\n    \n    if search:\n        query = query.filter(Notification.name.ilike(f\"%{search}%\"))\n    \n    notifications_list = query.offset(skip).limit(limit).all()\n    return notifications_list",
+    "category": "endpoints",
+    "difficulty": "beginner",
+    "tags": [
+      "fastapi",
+      "get",
+      "notifications",
+      "pagination"
+    ]
+  },
+  {
+    "instruction": "Create a FastAPI GET endpoint to retrieve a specific notification",
+    "input": "Return notification details by ID with proper error handling",
+    "output": "from fastapi import FastAPI, HTTPException, Depends\nfrom pydantic import BaseModel\nfrom sqlalchemy.orm import Session\nfrom database import SessionLocal, Notification\n\napp = FastAPI()\n\nclass NotificationResponse(BaseModel):\n    id: int\n    name: str\n    description: str\n    created_at: str\n    updated_at: str\n\ndef get_db():\n    db = SessionLocal()\n    try:\n        yield db\n    finally:\n        db.close()\n\n@app.get(\"/notifications/{item_id}\", response_model=NotificationResponse)\nasync def get_notification(item_id: int, db: Session = Depends(get_db)):\n    item = db.query(Notification).filter(Notification.id == item_id).first()\n    if not item:\n        raise HTTPException(status_code=404, detail=\"Notification not found\")\n    return item",
+    "category": "endpoints",
+    "difficulty": "beginner",
+    "tags": [
+      "fastapi",
+      "get",
+      "notifications",
+      "detail"
+    ]
+  },
+  {
+    "instruction": "Create a FastAPI POST endpoint to create a new notification",
+    "input": "Accept notification data with validation using Pydantic models",
+    "output": "from fastapi import FastAPI, HTTPException, Depends\nfrom pydantic import BaseModel, validator\nfrom sqlalchemy.orm import Session\nfrom database import SessionLocal, Notification\nfrom typing import Optional\n\napp = FastAPI()\n\nclass NotificationCreate(BaseModel):\n    name: str\n    description: Optional[str] = None\n    \n    @validator('name')\n    def validate_name(cls, v):\n        if not v or len(v.strip()) < 2:\n            raise ValueError('Name must be at least 2 characters long')\n        return v.strip()\n\nclass NotificationResponse(BaseModel):\n    id: int\n    name: str\n    description: Optional[str]\n    created_at: str\n\ndef get_db():\n    db = SessionLocal()\n    try:\n        yield db\n    finally:\n        db.close()\n\n@app.post(\"/notifications\", response_model=NotificationResponse)\nasync def create_notification(item: NotificationCreate, db: Session = Depends(get_db)):\n    # Check if item already exists\n    existing = db.query(Notification).filter(Notification.name == item.name).first()\n    if existing:\n        raise HTTPException(status_code=400, detail=\"Notification already exists\")\n    \n    db_item = Notification(**item.dict())\n    db.add(db_item)\n    db.commit()\n    db.refresh(db_item)\n    return db_item",
+    "category": "endpoints",
+    "difficulty": "intermediate",
+    "tags": [
+      "fastapi",
+      "post",
+      "notifications",
+      "validation"
+    ]
+  },
+  {
+    "instruction": "Create a FastAPI PUT endpoint to update a notification",
+    "input": "Update notification with partial data support and validation",
+    "output": "from fastapi import FastAPI, HTTPException, Depends\nfrom pydantic import BaseModel, validator\nfrom sqlalchemy.orm import Session\nfrom database import SessionLocal, Notification\nfrom typing import Optional\n\napp = FastAPI()\n\nclass NotificationUpdate(BaseModel):\n    name: Optional[str] = None\n    description: Optional[str] = None\n    \n    @validator('name')\n    def validate_name(cls, v):\n        if v is not None and (not v or len(v.strip()) < 2):\n            raise ValueError('Name must be at least 2 characters long')\n        return v.strip() if v else v\n\nclass NotificationResponse(BaseModel):\n    id: int\n    name: str\n    description: Optional[str]\n    updated_at: str\n\ndef get_db():\n    db = SessionLocal()\n    try:\n        yield db\n    finally:\n        db.close()\n\n@app.put(\"/notifications/{item_id}\", response_model=NotificationResponse)\nasync def update_notification(item_id: int, item_update: NotificationUpdate, db: Session = Depends(get_db)):\n    item = db.query(Notification).filter(Notification.id == item_id).first()\n    if not item:\n        raise HTTPException(status_code=404, detail=\"Notification not found\")\n    \n    # Update only provided fields\n    for field, value in item_update.dict(exclude_unset=True).items():\n        setattr(item, field, value)\n    \n    db.commit()\n    db.refresh(item)\n    return item",
+    "category": "endpoints",
+    "difficulty": "intermediate",
+    "tags": [
+      "fastapi",
+      "put",
+      "notifications",
+      "update"
+    ]
+  },
+  {
+    "instruction": "Create a FastAPI DELETE endpoint to remove a notification",
+    "input": "Delete notification by ID with proper error handling and confirmation",
+    "output": "from fastapi import FastAPI, HTTPException, Depends\nfrom sqlalchemy.orm import Session\nfrom database import SessionLocal, Notification\n\napp = FastAPI()\n\ndef get_db():\n    db = SessionLocal()\n    try:\n        yield db\n    finally:\n        db.close()\n\n@app.delete(\"/notifications/{item_id}\")\nasync def delete_notification(item_id: int, db: Session = Depends(get_db)):\n    item = db.query(Notification).filter(Notification.id == item_id).first()\n    if not item:\n        raise HTTPException(status_code=404, detail=\"Notification not found\")\n    \n    # Check if item can be deleted (add business logic here)\n    # For example, check if it's referenced by other entities\n    \n    db.delete(item)\n    db.commit()\n    return {\"message\": f\"Notification deleted successfully\", \"deleted_id\": item_id}",
+    "category": "endpoints",
+    "difficulty": "intermediate",
+    "tags": [
+      "fastapi",
+      "delete",
+      "notifications",
+      "remove"
+    ]
+  },
+  {
+    "instruction": "Create a FastAPI GET endpoint to retrieve all projects",
+    "input": "Include pagination and filtering options for projects",
+    "output": "from fastapi import FastAPI, Query, Depends\nfrom typing import List, Optional\nfrom pydantic import BaseModel\nfrom sqlalchemy.orm import Session\nfrom database import SessionLocal, Project\n\napp = FastAPI()\n\nclass ProjectResponse(BaseModel):\n    id: int\n    name: str\n    created_at: str\n    updated_at: str\n\ndef get_db():\n    db = SessionLocal()\n    try:\n        yield db\n    finally:\n        db.close()\n\n@app.get(\"/projects\", response_model=List[ProjectResponse])\nasync def get_projects(\n    skip: int = Query(0, ge=0),\n    limit: int = Query(100, ge=1, le=1000),\n    search: Optional[str] = Query(None),\n    db: Session = Depends(get_db)\n):\n    query = db.query(Project)\n    \n    if search:\n        query = query.filter(Project.name.ilike(f\"%{search}%\"))\n    \n    projects_list = query.offset(skip).limit(limit).all()\n    return projects_list",
+    "category": "endpoints",
+    "difficulty": "beginner",
+    "tags": [
+      "fastapi",
+      "get",
+      "projects",
+      "pagination"
+    ]
+  },
+  {
+    "instruction": "Create a FastAPI GET endpoint to retrieve a specific project",
+    "input": "Return project details by ID with proper error handling",
+    "output": "from fastapi import FastAPI, HTTPException, Depends\nfrom pydantic import BaseModel\nfrom sqlalchemy.orm import Session\nfrom database import SessionLocal, Project\n\napp = FastAPI()\n\nclass ProjectResponse(BaseModel):\n    id: int\n    name: str\n    description: str\n    created_at: str\n    updated_at: str\n\ndef get_db():\n    db = SessionLocal()\n    try:\n        yield db\n    finally:\n        db.close()\n\n@app.get(\"/projects/{item_id}\", response_model=ProjectResponse)\nasync def get_project(item_id: int, db: Session = Depends(get_db)):\n    item = db.query(Project).filter(Project.id == item_id).first()\n    if not item:\n        raise HTTPException(status_code=404, detail=\"Project not found\")\n    return item",
+    "category": "endpoints",
+    "difficulty": "beginner",
+    "tags": [
+      "fastapi",
+      "get",
+      "projects",
+      "detail"
+    ]
+  },
+  {
+    "instruction": "Create a FastAPI POST endpoint to create a new project",
+    "input": "Accept project data with validation using Pydantic models",
+    "output": "from fastapi import FastAPI, HTTPException, Depends\nfrom pydantic import BaseModel, validator\nfrom sqlalchemy.orm import Session\nfrom database import SessionLocal, Project\nfrom typing import Optional\n\napp = FastAPI()\n\nclass ProjectCreate(BaseModel):\n    name: str\n    description: Optional[str] = None\n    \n    @validator('name')\n    def validate_name(cls, v):\n        if not v or len(v.strip()) < 2:\n            raise ValueError('Name must be at least 2 characters long')\n        return v.strip()\n\nclass ProjectResponse(BaseModel):\n    id: int\n    name: str\n    description: Optional[str]\n    created_at: str\n\ndef get_db():\n    db = SessionLocal()\n    try:\n        yield db\n    finally:\n        db.close()\n\n@app.post(\"/projects\", response_model=ProjectResponse)\nasync def create_project(item: ProjectCreate, db: Session = Depends(get_db)):\n    # Check if item already exists\n    existing = db.query(Project).filter(Project.name == item.name).first()\n    if existing:\n        raise HTTPException(status_code=400, detail=\"Project already exists\")\n    \n    db_item = Project(**item.dict())\n    db.add(db_item)\n    db.commit()\n    db.refresh(db_item)\n    return db_item",
+    "category": "endpoints",
+    "difficulty": "intermediate",
+    "tags": [
+      "fastapi",
+      "post",
+      "projects",
+      "validation"
+    ]
+  },
+  {
+    "instruction": "Create a FastAPI PUT endpoint to update a project",
+    "input": "Update project with partial data support and validation",
+    "output": "from fastapi import FastAPI, HTTPException, Depends\nfrom pydantic import BaseModel, validator\nfrom sqlalchemy.orm import Session\nfrom database import SessionLocal, Project\nfrom typing import Optional\n\napp = FastAPI()\n\nclass ProjectUpdate(BaseModel):\n    name: Optional[str] = None\n    description: Optional[str] = None\n    \n    @validator('name')\n    def validate_name(cls, v):\n        if v is not None and (not v or len(v.strip()) < 2):\n            raise ValueError('Name must be at least 2 characters long')\n        return v.strip() if v else v\n\nclass ProjectResponse(BaseModel):\n    id: int\n    name: str\n    description: Optional[str]\n    updated_at: str\n\ndef get_db():\n    db = SessionLocal()\n    try:\n        yield db\n    finally:\n        db.close()\n\n@app.put(\"/projects/{item_id}\", response_model=ProjectResponse)\nasync def update_project(item_id: int, item_update: ProjectUpdate, db: Session = Depends(get_db)):\n    item = db.query(Project).filter(Project.id == item_id).first()\n    if not item:\n        raise HTTPException(status_code=404, detail=\"Project not found\")\n    \n    # Update only provided fields\n    for field, value in item_update.dict(exclude_unset=True).items():\n        setattr(item, field, value)\n    \n    db.commit()\n    db.refresh(item)\n    return item",
+    "category": "endpoints",
+    "difficulty": "intermediate",
+    "tags": [
+      "fastapi",
+      "put",
+      "projects",
+      "update"
+    ]
+  },
+  {
+    "instruction": "Create a FastAPI DELETE endpoint to remove a project",
+    "input": "Delete project by ID with proper error handling and confirmation",
+    "output": "from fastapi import FastAPI, HTTPException, Depends\nfrom sqlalchemy.orm import Session\nfrom database import SessionLocal, Project\n\napp = FastAPI()\n\ndef get_db():\n    db = SessionLocal()\n    try:\n        yield db\n    finally:\n        db.close()\n\n@app.delete(\"/projects/{item_id}\")\nasync def delete_project(item_id: int, db: Session = Depends(get_db)):\n    item = db.query(Project).filter(Project.id == item_id).first()\n    if not item:\n        raise HTTPException(status_code=404, detail=\"Project not found\")\n    \n    # Check if item can be deleted (add business logic here)\n    # For example, check if it's referenced by other entities\n    \n    db.delete(item)\n    db.commit()\n    return {\"message\": f\"Project deleted successfully\", \"deleted_id\": item_id}",
+    "category": "endpoints",
+    "difficulty": "intermediate",
+    "tags": [
+      "fastapi",
+      "delete",
+      "projects",
+      "remove"
+    ]
+  },
+  {
+    "instruction": "Create a FastAPI GET endpoint to retrieve all tasks",
+    "input": "Include pagination and filtering options for tasks",
+    "output": "from fastapi import FastAPI, Query, Depends\nfrom typing import List, Optional\nfrom pydantic import BaseModel\nfrom sqlalchemy.orm import Session\nfrom database import SessionLocal, Task\n\napp = FastAPI()\n\nclass TaskResponse(BaseModel):\n    id: int\n    name: str\n    created_at: str\n    updated_at: str\n\ndef get_db():\n    db = SessionLocal()\n    try:\n        yield db\n    finally:\n        db.close()\n\n@app.get(\"/tasks\", response_model=List[TaskResponse])\nasync def get_tasks(\n    skip: int = Query(0, ge=0),\n    limit: int = Query(100, ge=1, le=1000),\n    search: Optional[str] = Query(None),\n    db: Session = Depends(get_db)\n):\n    query = db.query(Task)\n    \n    if search:\n        query = query.filter(Task.name.ilike(f\"%{search}%\"))\n    \n    tasks_list = query.offset(skip).limit(limit).all()\n    return tasks_list",
+    "category": "endpoints",
+    "difficulty": "beginner",
+    "tags": [
+      "fastapi",
+      "get",
+      "tasks",
+      "pagination"
+    ]
+  },
+  {
+    "instruction": "Create a FastAPI GET endpoint to retrieve a specific task",
+    "input": "Return task details by ID with proper error handling",
+    "output": "from fastapi import FastAPI, HTTPException, Depends\nfrom pydantic import BaseModel\nfrom sqlalchemy.orm import Session\nfrom database import SessionLocal, Task\n\napp = FastAPI()\n\nclass TaskResponse(BaseModel):\n    id: int\n    name: str\n    description: str\n    created_at: str\n    updated_at: str\n\ndef get_db():\n    db = SessionLocal()\n    try:\n        yield db\n    finally:\n        db.close()\n\n@app.get(\"/tasks/{item_id}\", response_model=TaskResponse)\nasync def get_task(item_id: int, db: Session = Depends(get_db)):\n    item = db.query(Task).filter(Task.id == item_id).first()\n    if not item:\n        raise HTTPException(status_code=404, detail=\"Task not found\")\n    return item",
+    "category": "endpoints",
+    "difficulty": "beginner",
+    "tags": [
+      "fastapi",
+      "get",
+      "tasks",
+      "detail"
+    ]
+  },
+  {
+    "instruction": "Create a FastAPI POST endpoint to create a new task",
+    "input": "Accept task data with validation using Pydantic models",
+    "output": "from fastapi import FastAPI, HTTPException, Depends\nfrom pydantic import BaseModel, validator\nfrom sqlalchemy.orm import Session\nfrom database import SessionLocal, Task\nfrom typing import Optional\n\napp = FastAPI()\n\nclass TaskCreate(BaseModel):\n    name: str\n    description: Optional[str] = None\n    \n    @validator('name')\n    def validate_name(cls, v):\n        if not v or len(v.strip()) < 2:\n            raise ValueError('Name must be at least 2 characters long')\n        return v.strip()\n\nclass TaskResponse(BaseModel):\n    id: int\n    name: str\n    description: Optional[str]\n    created_at: str\n\ndef get_db():\n    db = SessionLocal()\n    try:\n        yield db\n    finally:\n        db.close()\n\n@app.post(\"/tasks\", response_model=TaskResponse)\nasync def create_task(item: TaskCreate, db: Session = Depends(get_db)):\n    # Check if item already exists\n    existing = db.query(Task).filter(Task.name == item.name).first()\n    if existing:\n        raise HTTPException(status_code=400, detail=\"Task already exists\")\n    \n    db_item = Task(**item.dict())\n    db.add(db_item)\n    db.commit()\n    db.refresh(db_item)\n    return db_item",
+    "category": "endpoints",
+    "difficulty": "intermediate",
+    "tags": [
+      "fastapi",
+      "post",
+      "tasks",
+      "validation"
+    ]
+  },
+  {
+    "instruction": "Create a FastAPI PUT endpoint to update a task",
+    "input": "Update task with partial data support and validation",
+    "output": "from fastapi import FastAPI, HTTPException, Depends\nfrom pydantic import BaseModel, validator\nfrom sqlalchemy.orm import Session\nfrom database import SessionLocal, Task\nfrom typing import Optional\n\napp = FastAPI()\n\nclass TaskUpdate(BaseModel):\n    name: Optional[str] = None\n    description: Optional[str] = None\n    \n    @validator('name')\n    def validate_name(cls, v):\n        if v is not None and (not v or len(v.strip()) < 2):\n            raise ValueError('Name must be at least 2 characters long')\n        return v.strip() if v else v\n\nclass TaskResponse(BaseModel):\n    id: int\n    name: str\n    description: Optional[str]\n    updated_at: str\n\ndef get_db():\n    db = SessionLocal()\n    try:\n        yield db\n    finally:\n        db.close()\n\n@app.put(\"/tasks/{item_id}\", response_model=TaskResponse)\nasync def update_task(item_id: int, item_update: TaskUpdate, db: Session = Depends(get_db)):\n    item = db.query(Task).filter(Task.id == item_id).first()\n    if not item:\n        raise HTTPException(status_code=404, detail=\"Task not found\")\n    \n    # Update only provided fields\n    for field, value in item_update.dict(exclude_unset=True).items():\n        setattr(item, field, value)\n    \n    db.commit()\n    db.refresh(item)\n    return item",
+    "category": "endpoints",
+    "difficulty": "intermediate",
+    "tags": [
+      "fastapi",
+      "put",
+      "tasks",
+      "update"
+    ]
+  },
+  {
+    "instruction": "Create a FastAPI DELETE endpoint to remove a task",
+    "input": "Delete task by ID with proper error handling and confirmation",
+    "output": "from fastapi import FastAPI, HTTPException, Depends\nfrom sqlalchemy.orm import Session\nfrom database import SessionLocal, Task\n\napp = FastAPI()\n\ndef get_db():\n    db = SessionLocal()\n    try:\n        yield db\n    finally:\n        db.close()\n\n@app.delete(\"/tasks/{item_id}\")\nasync def delete_task(item_id: int, db: Session = Depends(get_db)):\n    item = db.query(Task).filter(Task.id == item_id).first()\n    if not item:\n        raise HTTPException(status_code=404, detail=\"Task not found\")\n    \n    # Check if item can be deleted (add business logic here)\n    # For example, check if it's referenced by other entities\n    \n    db.delete(item)\n    db.commit()\n    return {\"message\": f\"Task deleted successfully\", \"deleted_id\": item_id}",
+    "category": "endpoints",
+    "difficulty": "intermediate",
+    "tags": [
+      "fastapi",
+      "delete",
+      "tasks",
+      "remove"
+    ]
+  },
+  {
+    "instruction": "Create a FastAPI GET endpoint to retrieve all files",
+    "input": "Include pagination and filtering options for files",
+    "output": "from fastapi import FastAPI, Query, Depends\nfrom typing import List, Optional\nfrom pydantic import BaseModel\nfrom sqlalchemy.orm import Session\nfrom database import SessionLocal, File\n\napp = FastAPI()\n\nclass FileResponse(BaseModel):\n    id: int\n    name: str\n    created_at: str\n    updated_at: str\n\ndef get_db():\n    db = SessionLocal()\n    try:\n        yield db\n    finally:\n        db.close()\n\n@app.get(\"/files\", response_model=List[FileResponse])\nasync def get_files(\n    skip: int = Query(0, ge=0),\n    limit: int = Query(100, ge=1, le=1000),\n    search: Optional[str] = Query(None),\n    db: Session = Depends(get_db)\n):\n    query = db.query(File)\n    \n    if search:\n        query = query.filter(File.name.ilike(f\"%{search}%\"))\n    \n    files_list = query.offset(skip).limit(limit).all()\n    return files_list",
+    "category": "endpoints",
+    "difficulty": "beginner",
+    "tags": [
+      "fastapi",
+      "get",
+      "files",
+      "pagination"
+    ]
+  },
+  {
+    "instruction": "Create a FastAPI GET endpoint to retrieve a specific file",
+    "input": "Return file details by ID with proper error handling",
+    "output": "from fastapi import FastAPI, HTTPException, Depends\nfrom pydantic import BaseModel\nfrom sqlalchemy.orm import Session\nfrom database import SessionLocal, File\n\napp = FastAPI()\n\nclass FileResponse(BaseModel):\n    id: int\n    name: str\n    description: str\n    created_at: str\n    updated_at: str\n\ndef get_db():\n    db = SessionLocal()\n    try:\n        yield db\n    finally:\n        db.close()\n\n@app.get(\"/files/{item_id}\", response_model=FileResponse)\nasync def get_file(item_id: int, db: Session = Depends(get_db)):\n    item = db.query(File).filter(File.id == item_id).first()\n    if not item:\n        raise HTTPException(status_code=404, detail=\"File not found\")\n    return item",
+    "category": "endpoints",
+    "difficulty": "beginner",
+    "tags": [
+      "fastapi",
+      "get",
+      "files",
+      "detail"
+    ]
+  },
+  {
+    "instruction": "Create a FastAPI POST endpoint to create a new file",
+    "input": "Accept file data with validation using Pydantic models",
+    "output": "from fastapi import FastAPI, HTTPException, Depends\nfrom pydantic import BaseModel, validator\nfrom sqlalchemy.orm import Session\nfrom database import SessionLocal, File\nfrom typing import Optional\n\napp = FastAPI()\n\nclass FileCreate(BaseModel):\n    name: str\n    description: Optional[str] = None\n    \n    @validator('name')\n    def validate_name(cls, v):\n        if not v or len(v.strip()) < 2:\n            raise ValueError('Name must be at least 2 characters long')\n        return v.strip()\n\nclass FileResponse(BaseModel):\n    id: int\n    name: str\n    description: Optional[str]\n    created_at: str\n\ndef get_db():\n    db = SessionLocal()\n    try:\n        yield db\n    finally:\n        db.close()\n\n@app.post(\"/files\", response_model=FileResponse)\nasync def create_file(item: FileCreate, db: Session = Depends(get_db)):\n    # Check if item already exists\n    existing = db.query(File).filter(File.name == item.name).first()\n    if existing:\n        raise HTTPException(status_code=400, detail=\"File already exists\")\n    \n    db_item = File(**item.dict())\n    db.add(db_item)\n    db.commit()\n    db.refresh(db_item)\n    return db_item",
+    "category": "endpoints",
+    "difficulty": "intermediate",
+    "tags": [
+      "fastapi",
+      "post",
+      "files",
+      "validation"
+    ]
+  },
+  {
+    "instruction": "Create a FastAPI PUT endpoint to update a file",
+    "input": "Update file with partial data support and validation",
+    "output": "from fastapi import FastAPI, HTTPException, Depends\nfrom pydantic import BaseModel, validator\nfrom sqlalchemy.orm import Session\nfrom database import SessionLocal, File\nfrom typing import Optional\n\napp = FastAPI()\n\nclass FileUpdate(BaseModel):\n    name: Optional[str] = None\n    description: Optional[str] = None\n    \n    @validator('name')\n    def validate_name(cls, v):\n        if v is not None and (not v or len(v.strip()) < 2):\n            raise ValueError('Name must be at least 2 characters long')\n        return v.strip() if v else v\n\nclass FileResponse(BaseModel):\n    id: int\n    name: str\n    description: Optional[str]\n    updated_at: str\n\ndef get_db():\n    db = SessionLocal()\n    try:\n        yield db\n    finally:\n        db.close()\n\n@app.put(\"/files/{item_id}\", response_model=FileResponse)\nasync def update_file(item_id: int, item_update: FileUpdate, db: Session = Depends(get_db)):\n    item = db.query(File).filter(File.id == item_id).first()\n    if not item:\n        raise HTTPException(status_code=404, detail=\"File not found\")\n    \n    # Update only provided fields\n    for field, value in item_update.dict(exclude_unset=True).items():\n        setattr(item, field, value)\n    \n    db.commit()\n    db.refresh(item)\n    return item",
+    "category": "endpoints",
+    "difficulty": "intermediate",
+    "tags": [
+      "fastapi",
+      "put",
+      "files",
+      "update"
+    ]
+  },
+  {
+    "instruction": "Create a FastAPI DELETE endpoint to remove a file",
+    "input": "Delete file by ID with proper error handling and confirmation",
+    "output": "from fastapi import FastAPI, HTTPException, Depends\nfrom sqlalchemy.orm import Session\nfrom database import SessionLocal, File\n\napp = FastAPI()\n\ndef get_db():\n    db = SessionLocal()\n    try:\n        yield db\n    finally:\n        db.close()\n\n@app.delete(\"/files/{item_id}\")\nasync def delete_file(item_id: int, db: Session = Depends(get_db)):\n    item = db.query(File).filter(File.id == item_id).first()\n    if not item:\n        raise HTTPException(status_code=404, detail=\"File not found\")\n    \n    # Check if item can be deleted (add business logic here)\n    # For example, check if it's referenced by other entities\n    \n    db.delete(item)\n    db.commit()\n    return {\"message\": f\"File deleted successfully\", \"deleted_id\": item_id}",
+    "category": "endpoints",
+    "difficulty": "intermediate",
+    "tags": [
+      "fastapi",
+      "delete",
+      "files",
+      "remove"
+    ]
+  },
+  {
+    "instruction": "Create a FastAPI GET endpoint to retrieve all reports",
+    "input": "Include pagination and filtering options for reports",
+    "output": "from fastapi import FastAPI, Query, Depends\nfrom typing import List, Optional\nfrom pydantic import BaseModel\nfrom sqlalchemy.orm import Session\nfrom database import SessionLocal, Report\n\napp = FastAPI()\n\nclass ReportResponse(BaseModel):\n    id: int\n    name: str\n    created_at: str\n    updated_at: str\n\ndef get_db():\n    db = SessionLocal()\n    try:\n        yield db\n    finally:\n        db.close()\n\n@app.get(\"/reports\", response_model=List[ReportResponse])\nasync def get_reports(\n    skip: int = Query(0, ge=0),\n    limit: int = Query(100, ge=1, le=1000),\n    search: Optional[str] = Query(None),\n    db: Session = Depends(get_db)\n):\n    query = db.query(Report)\n    \n    if search:\n        query = query.filter(Report.name.ilike(f\"%{search}%\"))\n    \n    reports_list = query.offset(skip).limit(limit).all()\n    return reports_list",
+    "category": "endpoints",
+    "difficulty": "beginner",
+    "tags": [
+      "fastapi",
+      "get",
+      "reports",
+      "pagination"
+    ]
+  },
+  {
+    "instruction": "Create a FastAPI GET endpoint to retrieve a specific report",
+    "input": "Return report details by ID with proper error handling",
+    "output": "from fastapi import FastAPI, HTTPException, Depends\nfrom pydantic import BaseModel\nfrom sqlalchemy.orm import Session\nfrom database import SessionLocal, Report\n\napp = FastAPI()\n\nclass ReportResponse(BaseModel):\n    id: int\n    name: str\n    description: str\n    created_at: str\n    updated_at: str\n\ndef get_db():\n    db = SessionLocal()\n    try:\n        yield db\n    finally:\n        db.close()\n\n@app.get(\"/reports/{item_id}\", response_model=ReportResponse)\nasync def get_report(item_id: int, db: Session = Depends(get_db)):\n    item = db.query(Report).filter(Report.id == item_id).first()\n    if not item:\n        raise HTTPException(status_code=404, detail=\"Report not found\")\n    return item",
+    "category": "endpoints",
+    "difficulty": "beginner",
+    "tags": [
+      "fastapi",
+      "get",
+      "reports",
+      "detail"
+    ]
+  },
+  {
+    "instruction": "Create a FastAPI POST endpoint to create a new report",
+    "input": "Accept report data with validation using Pydantic models",
+    "output": "from fastapi import FastAPI, HTTPException, Depends\nfrom pydantic import BaseModel, validator\nfrom sqlalchemy.orm import Session\nfrom database import SessionLocal, Report\nfrom typing import Optional\n\napp = FastAPI()\n\nclass ReportCreate(BaseModel):\n    name: str\n    description: Optional[str] = None\n    \n    @validator('name')\n    def validate_name(cls, v):\n        if not v or len(v.strip()) < 2:\n            raise ValueError('Name must be at least 2 characters long')\n        return v.strip()\n\nclass ReportResponse(BaseModel):\n    id: int\n    name: str\n    description: Optional[str]\n    created_at: str\n\ndef get_db():\n    db = SessionLocal()\n    try:\n        yield db\n    finally:\n        db.close()\n\n@app.post(\"/reports\", response_model=ReportResponse)\nasync def create_report(item: ReportCreate, db: Session = Depends(get_db)):\n    # Check if item already exists\n    existing = db.query(Report).filter(Report.name == item.name).first()\n    if existing:\n        raise HTTPException(status_code=400, detail=\"Report already exists\")\n    \n    db_item = Report(**item.dict())\n    db.add(db_item)\n    db.commit()\n    db.refresh(db_item)\n    return db_item",
+    "category": "endpoints",
+    "difficulty": "intermediate",
+    "tags": [
+      "fastapi",
+      "post",
+      "reports",
+      "validation"
+    ]
+  },
+  {
+    "instruction": "Create a FastAPI PUT endpoint to update a report",
+    "input": "Update report with partial data support and validation",
+    "output": "from fastapi import FastAPI, HTTPException, Depends\nfrom pydantic import BaseModel, validator\nfrom sqlalchemy.orm import Session\nfrom database import SessionLocal, Report\nfrom typing import Optional\n\napp = FastAPI()\n\nclass ReportUpdate(BaseModel):\n    name: Optional[str] = None\n    description: Optional[str] = None\n    \n    @validator('name')\n    def validate_name(cls, v):\n        if v is not None and (not v or len(v.strip()) < 2):\n            raise ValueError('Name must be at least 2 characters long')\n        return v.strip() if v else v\n\nclass ReportResponse(BaseModel):\n    id: int\n    name: str\n    description: Optional[str]\n    updated_at: str\n\ndef get_db():\n    db = SessionLocal()\n    try:\n        yield db\n    finally:\n        db.close()\n\n@app.put(\"/reports/{item_id}\", response_model=ReportResponse)\nasync def update_report(item_id: int, item_update: ReportUpdate, db: Session = Depends(get_db)):\n    item = db.query(Report).filter(Report.id == item_id).first()\n    if not item:\n        raise HTTPException(status_code=404, detail=\"Report not found\")\n    \n    # Update only provided fields\n    for field, value in item_update.dict(exclude_unset=True).items():\n        setattr(item, field, value)\n    \n    db.commit()\n    db.refresh(item)\n    return item",
+    "category": "endpoints",
+    "difficulty": "intermediate",
+    "tags": [
+      "fastapi",
+      "put",
+      "reports",
+      "update"
+    ]
+  },
+  {
+    "instruction": "Create a FastAPI DELETE endpoint to remove a report",
+    "input": "Delete report by ID with proper error handling and confirmation",
+    "output": "from fastapi import FastAPI, HTTPException, Depends\nfrom sqlalchemy.orm import Session\nfrom database import SessionLocal, Report\n\napp = FastAPI()\n\ndef get_db():\n    db = SessionLocal()\n    try:\n        yield db\n    finally:\n        db.close()\n\n@app.delete(\"/reports/{item_id}\")\nasync def delete_report(item_id: int, db: Session = Depends(get_db)):\n    item = db.query(Report).filter(Report.id == item_id).first()\n    if not item:\n        raise HTTPException(status_code=404, detail=\"Report not found\")\n    \n    # Check if item can be deleted (add business logic here)\n    # For example, check if it's referenced by other entities\n    \n    db.delete(item)\n    db.commit()\n    return {\"message\": f\"Report deleted successfully\", \"deleted_id\": item_id}",
+    "category": "endpoints",
+    "difficulty": "intermediate",
+    "tags": [
+      "fastapi",
+      "delete",
+      "reports",
+      "remove"
+    ]
   }
 ]
