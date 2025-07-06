@@ -4,6 +4,7 @@ Script for running LoRA fine-tuning on a pre-trained language model.
 
 import json
 import logging
+import os
 from pathlib import Path
 from typing import Optional
 
@@ -13,6 +14,7 @@ from transformers import (
     TrainingArguments,
     DataCollatorForLanguageModeling,
 )
+from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
 
 from model.load_base_model import ModelLoader
 from data.prepare_dataset import DatasetPreparator
@@ -37,96 +39,98 @@ def load_training_config(config_path: Path) -> dict:
         return json.load(f)
 
 
-def run_training(
-    training_config_path: str,
-    lora_config_path: str,
-    data_path: Optional[str] = None,
-    output_dir: Optional[str] = None,
-    use_dummy_data: bool = False
-):
+def save_training_outputs(output_dir: Path, model, tokenizer, training_args, final_metrics=None):
     """
-    Run the complete fine-tuning pipeline.
+    Save all training outputs in an organized structure.
     
     Args:
-        training_config_path: Path to training configuration file
-        lora_config_path: Path to LoRA configuration file
-        data_path: Optional path to training data
-        output_dir: Optional custom output directory
-        use_dummy_data: Whether to use dummy data for testing
+        output_dir: Base output directory
+        model: Trained model
+        tokenizer: Tokenizer
+        training_args: Training arguments used
+        final_metrics: Optional dictionary of final training metrics
     """
-    # Setup paths
-    training_config_path = Path(training_config_path)
-    output_dir = Path(output_dir) if output_dir else Path('outputs')
-    log_dir = output_dir / 'logs'
+    # Save model and tokenizer
+    model_dir = output_dir / 'model'
+    model_dir.mkdir(parents=True, exist_ok=True)
+    model.save_pretrained(model_dir)
+    tokenizer.save_pretrained(model_dir)
     
-    # Setup logging
-    setup_logging(log_dir)
+    # Save training arguments
+    with open(output_dir / 'training_args.json', 'w') as f:
+        json.dump(training_args.to_dict(), f, indent=2)
+        
+    # Save final metrics if available
+    if final_metrics:
+        with open(output_dir / 'metrics.json', 'w') as f:
+            json.dump(final_metrics, f, indent=2)
+            
+    # Save GPU info
+    if torch.cuda.is_available():
+        gpu_info = {
+            "device_name": torch.cuda.get_device_name(0),
+            "memory_allocated_gb": torch.cuda.memory_allocated() / 1e9,
+            "memory_reserved_gb": torch.cuda.memory_reserved() / 1e9
+        }
+        with open(output_dir / 'gpu_info.json', 'w') as f:
+            json.dump(gpu_info, f, indent=2)
+
+
+def run_training(model, tokenizer, dataset, output_dir="./results"):
+    """
+    Run LoRA fine-tuning on the model
+    """
     logger = logging.getLogger(__name__)
-    logger.info("Starting fine-tuning process")
-    
-    # Load configurations
-    training_config = load_training_config(training_config_path)
-    if output_dir:
-        training_config['output_dir'] = str(output_dir / 'checkpoints')
-    
-    # Load model and tokenizer
-    logger.info("Loading model and tokenizer")
-    model_loader = ModelLoader(lora_config_path)
-    model, tokenizer = model_loader.load_base_model()
-    model = model_loader.add_lora_adapter(model)
-    
-    # Prepare dataset
-    logger.info("Preparing dataset")
-    data_preparator = DatasetPreparator(
-        tokenizer=tokenizer,
-        max_length=training_config.get('max_seq_length', 512),
-        data_path=data_path
+
+    # Prepare model for k-bit training
+    logger.info("Preparing model for k-bit training")
+    model = prepare_model_for_kbit_training(model)
+
+    # Configure LoRA
+    logger.info("Configuring LoRA adapter")
+    lora_config = LoraConfig(
+        r=32,  # attention heads
+        lora_alpha=64,  # alpha scaling
+        target_modules=["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
+        lora_dropout=0.05,
+        bias="none",
+        task_type="CAUSAL_LM"
     )
-    dataset = data_preparator.prepare_dataset(use_dummy=use_dummy_data)
-    
-    # Split dataset if evaluation is enabled
-    if training_config.get('do_eval', False):
-        dataset = dataset.train_test_split(
-            test_size=0.1,
-            shuffle=True,
-            seed=42
-        )
-    
-    # Initialize training arguments
-    training_args = TrainingArguments(**training_config)
-    
-    # Initialize data collator
-    data_collator = DataCollatorForLanguageModeling(
-        tokenizer=tokenizer,
-        mlm=False
+
+    # Add LoRA adaptor
+    model = get_peft_model(model, lora_config)
+
+    # Configure training arguments
+    training_args = TrainingArguments(
+        output_dir=output_dir,
+        num_train_epochs=3,
+        per_device_train_batch_size=4,
+        gradient_accumulation_steps=4,
+        learning_rate=2e-4,
+        lr_scheduler_type="cosine",
+        warmup_ratio=0.05,
+        logging_steps=10,
+        save_strategy="epoch",
+        save_total_limit=3,
+        fp16=True,
+        report_to="none"
     )
-    
-    # Initialize trainer
+
+    # Create trainer
     trainer = Trainer(
         model=model,
         args=training_args,
-        train_dataset=dataset['train'] if training_config.get('do_eval', False) else dataset,
-        eval_dataset=dataset['test'] if training_config.get('do_eval', False) else None,
-        data_collator=data_collator,
+        train_dataset=dataset,
+        data_collator=DataCollatorForLanguageModeling(tokenizer, mlm=False)
     )
-    
-    try:
-        # Run training
-        logger.info("Starting training")
-        trainer.train()
-        
-        # Save the final model
-        logger.info("Saving final model")
-        trainer.save_model()
-        
-        # Save the tokenizer
-        tokenizer.save_pretrained(training_config['output_dir'])
-        
-        logger.info("Training completed successfully")
-        
-    except Exception as e:
-        logger.error(f"Training failed with error: {str(e)}")
-        raise
+
+    # Start training
+    logger.info("Starting training")
+    trainer.train()
+
+    # Save the final model
+    logger.info(f"Saving model to {output_dir}")
+    trainer.save_model()
 
 
 if __name__ == "__main__":
@@ -148,8 +152,8 @@ if __name__ == "__main__":
     parser.add_argument(
         "--data_path",
         type=str,
-        default="data/code_alpaca_20k.json",
-        help="Path to training data file"
+        default="data/data/fastapi_mined_dataset.json",
+        help="Path to FastAPI training dataset"
     )
     parser.add_argument(
         "--output_dir",

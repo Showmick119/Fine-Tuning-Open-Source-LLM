@@ -1,100 +1,102 @@
 """
-Module for preparing and preprocessing datasets for LLM fine-tuning.
+Module for preparing and preprocessing FastAPI training dataset.
 """
 
 from typing import Dict, List, Optional, Union
 from pathlib import Path
 import json
+import logging
 
-from datasets import Dataset, load_dataset
+from datasets import Dataset
 from transformers import AutoTokenizer, PreTrainedTokenizer
 
 class DatasetPreparator:
-    """Handles dataset preparation and preprocessing for LLM fine-tuning."""
+    """Handles FastAPI dataset preparation and preprocessing for CodeLlama fine-tuning."""
     
-    def __init__(
-        self,
-        tokenizer: Union[str, PreTrainedTokenizer],
-        max_length: int = 512,
-        data_path: Optional[str] = None
-    ):
+    def __init__(self, dataset_path: str = "data/fastapi_mined_dataset.json"):
+        self.dataset_path = dataset_path
+        self.logger = logging.getLogger(__name__)
+
+    def load_and_prepare_dataset(self) -> Dataset:
         """
-        Initialize the dataset preparator.
+        Load and prepare the FastAPI dataset for fine-tuning
+        """
+        # Load raw data
+        self.logger.info(f"Loading dataset from {self.dataset_path}")
+        with open(self.dataset_path, 'r', encoding='utf-8') as f:
+            raw_data = json.load(f)
+
+        # Prepare data in the format expected by the model
+        processed_data = []
+        for item in raw_data:
+            # Format the instruction and input
+            instruction = f"Category: {item['category']}\nDifficulty: {item['difficulty']}\n\n{item['instruction']}"
+            
+            # Combine input and output with proper formatting
+            input_text = item.get('input', '')
+            if input_text:
+                instruction += f"\n\nInput:\n{input_text}"
+            
+            # Create the formatted example
+            processed_data.append({
+                "instruction": instruction,
+                "output": item['output']
+            })
+
+        # Create HuggingFace dataset
+        dataset = Dataset.from_list(processed_data)
+        self.logger.info(f"Created dataset with {len(dataset)} examples")
+        
+        return dataset
+
+    def format_prompt(self, instruction: str, input_text: str = "", category: str = "", difficulty: str = "") -> str:
+        """
+        Format the instruction and input into a prompt suitable for CodeLlama.
         
         Args:
-            tokenizer: HuggingFace tokenizer or path/name
-            max_length: Maximum sequence length for tokenization
-            data_path: Optional path to custom dataset
+            instruction: The main instruction/task
+            input_text: Optional input context
+            category: FastAPI category (auth, endpoints, etc.)
+            difficulty: Task difficulty level
         """
-        self.tokenizer = (
-            tokenizer if isinstance(tokenizer, PreTrainedTokenizer)
-            else AutoTokenizer.from_pretrained(tokenizer)
-        )
-        self.max_length = max_length
-        self.data_path = Path(data_path) if data_path else None
+        # Build context section
+        context = f"Category: {category}\nDifficulty: {difficulty}\n\n" if category and difficulty else ""
         
-    def load_dummy_data(self) -> Dataset:
-        """Create a small dummy dataset for testing purposes."""
-        dummy_data = {
-            "instruction": [
-                "Write a poem about AI",
-                "Explain quantum computing",
-                "Write a story about space exploration"
-            ],
-            "input": [""] * 3,  # Empty inputs for instruction-only examples
-            "output": [
-                "In circuits of light and neural streams,\nAI dances in digital dreams...",
-                "Quantum computing leverages quantum mechanical phenomena...",
-                "The starship Horizon glided silently through the cosmic void..."
-            ]
-        }
-        return Dataset.from_dict(dummy_data)
-    
-    def load_custom_data(self) -> Dataset:
-        """Load custom dataset from JSON or JSONL file."""
-        if not self.data_path or not self.data_path.exists():
-            raise FileNotFoundError(f"Data file not found at {self.data_path}")
-            
-        if self.data_path.suffix == '.json':
-            with open(self.data_path, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-            
-            # Handle different data formats
-            if isinstance(data, list):
-                # Data is a list of examples (CodeAlpaca format)
-                return Dataset.from_list(data)
-            else:
-                # Data is a dictionary with column names as keys
-                return Dataset.from_dict(data)
-        else:  # Assume JSONL
-            return Dataset.from_json(str(self.data_path))
-            
-    def format_prompt(self, instruction: str, input_text: str = "") -> str:
-        """Format the instruction and input into a prompt suitable for CodeLlama."""
+        # Format with CodeLlama prompt structure
         if input_text and input_text.strip():
-            return f"[INST] {instruction}\n\nInput:\n{input_text} [/INST]"
-        return f"[INST] {instruction} [/INST]"
+            return f"<s>[INST] {context}{instruction}\n\nInput:\n{input_text} [/INST]"
+        return f"<s>[INST] {context}{instruction} [/INST]"
     
     def preprocess_function(self, examples: Dict[str, List]) -> Dict[str, List]:
         """
         Tokenize and format examples for training.
         
         Args:
-            examples: Batch of examples with instruction, input, and output fields
+            examples: Batch of examples with instruction, input, output, and metadata
             
         Returns:
             Processed examples with input_ids and labels
         """
-        model_inputs = {"input_ids": [], "labels": []}
+        model_inputs = {"input_ids": [], "labels": [], "attention_mask": []}
         
-        for instruction, inp, output in zip(
-            examples["instruction"], examples["input"], examples["output"]
-        ):
-            # Format prompt and combine with output
-            prompt = self.format_prompt(instruction, inp)
+        for idx in range(len(examples["instruction"])):
+            # Format prompt with metadata
+            prompt = self.format_prompt(
+                instruction=examples["instruction"][idx],
+                input_text=examples["input"][idx],
+                category=examples["category"][idx],
+                difficulty=examples["difficulty"][idx]
+            )
+            
+            # Ensure output ends with EOS token
+            output = examples["output"][idx].strip()
+            if not output.endswith(self.tokenizer.eos_token):
+                output = output + self.tokenizer.eos_token
+                
+            # Combine prompt and output
             full_text = prompt + output
             
-            # Tokenize
+            # Tokenize with truncation safeguards
             tokenized = self.tokenizer(
                 full_text,
                 truncation=True,
@@ -117,28 +119,29 @@ class DatasetPreparator:
             
             model_inputs["input_ids"].append(tokenized["input_ids"])
             model_inputs["labels"].append(labels)
+            model_inputs["attention_mask"].append(tokenized["attention_mask"])
         
         return model_inputs
     
     def prepare_dataset(self, use_dummy: bool = False) -> Dataset:
         """
-        Prepare the complete dataset for training.
+        Prepare the FastAPI dataset for training.
         
         Args:
-            use_dummy: Whether to use dummy data instead of loading from file
+            use_dummy: Ignored (kept for backwards compatibility)
             
         Returns:
             Processed dataset ready for training
         """
-        # Load raw data
-        dataset = self.load_dummy_data() if use_dummy else self.load_custom_data()
+        # Load dataset
+        dataset = self.load_and_prepare_dataset()
         
         # Apply preprocessing
         processed_dataset = dataset.map(
             self.preprocess_function,
             batched=True,
             remove_columns=dataset.column_names,
-            desc="Preprocessing dataset",
+            desc="Preprocessing FastAPI examples",
         )
         
         return processed_dataset
@@ -147,10 +150,11 @@ class DatasetPreparator:
 if __name__ == "__main__":
     # Example usage
     preparator = DatasetPreparator(
-        tokenizer="mistralai/Mistral-7B-v0.1",
-        max_length=512
+        dataset_path="data/data/fastapi_mined_dataset.json"
     )
     
-    # Prepare dummy dataset
-    dataset = preparator.prepare_dataset(use_dummy=True)
-    print(f"Prepared dataset with {len(dataset)} examples") 
+    # Test dataset preparation
+    dataset = preparator.prepare_dataset()
+    print(f"✓ Prepared dataset with {len(dataset)} examples")
+    print(f"✓ Input IDs shape: {len(dataset[0]['input_ids'])}")
+    print(f"✓ Labels shape: {len(dataset[0]['labels'])}") 
