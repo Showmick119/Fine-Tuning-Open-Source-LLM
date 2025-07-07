@@ -76,9 +76,24 @@ def save_training_outputs(output_dir: Path, model, tokenizer, training_args, fin
             json.dump(gpu_info, f, indent=2)
 
 
-def run_training(model, tokenizer, dataset, output_dir="./results"):
+def run_training(
+    model,
+    tokenizer,
+    dataset,
+    output_dir="./results",
+    push_to_hub=True,
+    hub_model_id=None
+):
     """
-    Run LoRA fine-tuning on the model
+    Run LoRA fine-tuning on the model and optionally push to HuggingFace Hub
+    
+    Args:
+        model: The base model to fine-tune
+        tokenizer: The tokenizer
+        dataset: Training dataset
+        output_dir: Temporary directory for checkpoints (in Colab)
+        push_to_hub: Whether to push the model to HuggingFace Hub
+        hub_model_id: The ID to use when pushing to hub (e.g. "username/model-name")
     """
     logger = logging.getLogger(__name__)
 
@@ -102,7 +117,7 @@ def run_training(model, tokenizer, dataset, output_dir="./results"):
 
     # Configure training arguments
     training_args = TrainingArguments(
-        output_dir=output_dir,
+        output_dir=output_dir,  # Temporary directory in Colab
         num_train_epochs=3,
         per_device_train_batch_size=4,
         gradient_accumulation_steps=4,
@@ -113,7 +128,9 @@ def run_training(model, tokenizer, dataset, output_dir="./results"):
         save_strategy="epoch",
         save_total_limit=3,
         fp16=True,
-        report_to="none"
+        push_to_hub=push_to_hub,
+        hub_model_id=hub_model_id,
+        hub_strategy="every_save" if push_to_hub else "no"
     )
 
     # Create trainer
@@ -128,9 +145,15 @@ def run_training(model, tokenizer, dataset, output_dir="./results"):
     logger.info("Starting training")
     trainer.train()
 
-    # Save the final model
-    logger.info(f"Saving model to {output_dir}")
-    trainer.save_model()
+    # Push to Hub if requested
+    if push_to_hub and hub_model_id:
+        logger.info(f"Pushing model to HuggingFace Hub: {hub_model_id}")
+        trainer.push_to_hub()
+        logger.info("Model pushed successfully!")
+    else:
+        logger.info("Skipping push to Hub")
+
+    return trainer.model  # Return the trained model
 
 
 if __name__ == "__main__":
@@ -156,14 +179,9 @@ if __name__ == "__main__":
         help="Path to FastAPI training dataset"
     )
     parser.add_argument(
-        "--output_dir",
+        "--hub_model_id",
         type=str,
-        help="Custom output directory"
-    )
-    parser.add_argument(
-        "--use_dummy_data",
-        action="store_true",
-        help="Use dummy data for testing"
+        help="HuggingFace Hub model ID for pushing (e.g. username/model-name)"
     )
     
     args = parser.parse_args()
@@ -172,6 +190,5 @@ if __name__ == "__main__":
         training_config_path=args.training_config,
         lora_config_path=args.lora_config,
         data_path=args.data_path,
-        output_dir=args.output_dir,
-        use_dummy_data=args.use_dummy_data
+        hub_model_id=args.hub_model_id
     ) 
