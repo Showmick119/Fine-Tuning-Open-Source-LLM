@@ -4,7 +4,7 @@ Module for loading and configuring the base model with LoRA adapters.
 
 import json
 from pathlib import Path
-from typing import Optional, Union, Dict, Any, Tuple
+from typing import Optional, Union, Tuple
 import logging
 
 import torch
@@ -41,7 +41,9 @@ DEFAULT_CONFIG = {
 }
 
 class ModelLoader:
-    """Handles loading and configuring the base model with LoRA."""
+    """
+    Handles loading and configuring the base model with LoRA.
+    """
 
     def __init__(self, config_path: Optional[Union[str, Path]] = None):
         """
@@ -66,7 +68,9 @@ class ModelLoader:
         self._validate_config()
 
     def _validate_config(self):
-        """Validate the configuration parameters."""
+        """
+        Validate the configuration parameters.
+        """
         required_fields = {"base_model_name", "lora_config"}
         missing = required_fields - set(self.config.keys())
         if missing:
@@ -79,9 +83,11 @@ class ModelLoader:
 
     def load_model_and_tokenizer(self) -> Tuple[AutoModelForCausalLM, AutoTokenizer]:
         """
-        Load the base model and tokenizer with optimized settings for fine-tuning
+        Load the base model and tokenizer with optimized settings for fine-tuning.
+
+        Returns:
+            Returns a tuple of the Code Llama model and tokenizer with LoRA and quantization configurations.
         """
-        # Configure quantization
         bnb_config = BitsAndBytesConfig(
             load_in_4bit=self.config["load_in_4bit"],
             bnb_4bit_quant_type=self.config["bnb_config"]["bnb_4bit_quant_type"],
@@ -89,7 +95,6 @@ class ModelLoader:
             bnb_4bit_use_double_quant=self.config["bnb_config"]["bnb_4bit_use_double_quant"]
         )
 
-        # Load model with quantization config
         self.logger.info(f"Loading model: {self.config['base_model_name']}")
         model = AutoModelForCausalLM.from_pretrained(
             self.config['base_model_name'],
@@ -99,14 +104,11 @@ class ModelLoader:
             torch_dtype=getattr(torch, self.config["torch_dtype"])
         )
 
-        # Prepare model for k-bit training
         model = prepare_model_for_kbit_training(model)
 
-        # Add LoRA adapter
         lora_config = LoraConfig(**self.config["lora_config"])
         model = get_peft_model(model, lora_config)
-        
-        # Load tokenizer
+
         self.logger.info("Loading tokenizer")
         tokenizer = AutoTokenizer.from_pretrained(
             self.config['base_model_name'],
@@ -115,17 +117,16 @@ class ModelLoader:
         tokenizer.pad_token = tokenizer.eos_token
         tokenizer.padding_side = "right"
 
-        return model, tokenizer
+        return base_model, tokenizer
 
 
 if __name__ == "__main__":
-    # Example usage
-    loader = ModelLoader("codellama/CodeLlama-7b-Instruct-hf")
-    
-    # Load base model and tokenizer
+    loader = ModelLoader("configs/lora_config.json")
+
     base_model, tokenizer = loader.load_model_and_tokenizer()
     
     print("Model loading complete")
+
     if torch.cuda.is_available():
         print(f"GPU Memory Used: {torch.cuda.memory_allocated() / 1e9:.2f}GB")
         print(f"GPU Memory Reserved: {torch.cuda.memory_reserved() / 1e9:.2f}GB") 
