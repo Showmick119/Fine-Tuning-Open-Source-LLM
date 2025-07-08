@@ -1,369 +1,240 @@
 """
-FastAPI Specialist Evaluation Module
+FastAPI Code Evaluator
 
-This module evaluates fine-tuned models on FastAPI-specific tasks by:
-1. Testing if generated code is syntactically correct
-2. Checking if code follows FastAPI patterns
-3. Testing if endpoints actually work
-4. Comparing against baseline models
+This module evaluates FastAPI code by checking:
+1. Syntax correctness
+2. FastAPI patterns and best practices
+3. Code structure and organization
 """
 
-import json
-import tempfile
-import subprocess
 import ast
 import re
-from pathlib import Path
-from typing import Dict, List, Optional, Tuple
-import logging
-from dataclasses import dataclass
-from datetime import datetime
+from typing import Dict, List, Any, Optional, Set
+from dataclasses import dataclass, field
+from enum import Enum
 
-import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM
-from peft import PeftModel
+class FastAPIBestPractices(Enum):
+    """Enum for FastAPI best practices patterns"""
+    PYDANTIC_MODELS = r"class\s+\w+(\w*Model|\w*Schema|\w*Request|\w*Response)"
+    RESPONSE_MODEL = r"@\w+\.\w+\([^)]*response_model\s*="
+    STATUS_CODES = r"(status_code\s*=|status\.\w+)"
+    DEPENDENCIES = r"Depends\([^)]+\)"
+    ASYNC_DEF = r"async\s+def"
+    PATH_PARAMS = r"{[^}]+}"
+    QUERY_PARAMS = r"(\w+\s*:\s*Optional|\w+\s*=\s*Query\()"
+    BODY_MODELS = r"(\w+\s*:\s*\w+Model|\w+\s*:\s*\w+Schema)"
 
+def extract_code_from_markdown(text: str) -> str:
+    """Extract Python code from markdown-formatted text with code blocks."""
+    # Find content between triple backticks
+    code_blocks = re.findall(r'```(?:python)?(.*?)```', text, re.DOTALL)
+    if code_blocks:
+        # Return the first code block found
+        return code_blocks[0].strip()
+    # If no code blocks found, try to find the code directly
+    # Remove any explanatory text that comes before or after the code
+    if 'from fastapi import' in text:
+        # Find the first import statement and everything after it
+        code = text[text.find('from fastapi import'):]
+        # Remove any explanatory text that might come after the code
+        if 'This endpoint' in code:
+            code = code[:code.find('This endpoint')]
+        return code.strip()
+    return text.strip()
 
 @dataclass
-class FastAPITestCase:
-    """Structure for FastAPI evaluation test case."""
-    instruction: str
-    input: str
-    expected_patterns: List[str]  # Regex patterns that should be in output
-    category: str
-    difficulty: str
-    test_type: str  # 'syntax', 'pattern', 'functional'
-
-
-class FastAPIEvaluator:
-    """Evaluates FastAPI specialist models."""
+class EvaluationResult:
+    """Stores the evaluation results for a single test case."""
+    prompt: str
+    response: str
+    is_valid_python: bool = False
+    has_imports: bool = False
+    has_router: bool = False
+    has_endpoint: bool = False
+    has_type_hints: bool = False
+    has_docstring: bool = False
+    has_error_handling: bool = False
+    has_pydantic_models: bool = False
+    has_response_model: bool = False
+    has_status_codes: bool = False
+    has_dependencies: bool = False
+    has_async_def: bool = False
+    has_path_params: bool = False
+    has_query_params: bool = False
+    has_body_models: bool = False
+    required_imports: Set[str] = field(default_factory=set)
+    missing_imports: Set[str] = field(default_factory=set)
+    extracted_endpoints: List[Dict[str, Any]] = field(default_factory=list)
+    score: float = 0.0
+    error_message: Optional[str] = None
     
-    def __init__(self, output_dir: str = "outputs/fastapi_evaluation"):
-        """Initialize the evaluator."""
-        self.output_dir = Path(output_dir)
-        self.output_dir.mkdir(parents=True, exist_ok=True)
+    def calculate_score(self) -> float:
+        """Calculate weighted score based on various criteria."""
+        weights = {
+            'is_valid_python': 1.0,
+            'has_imports': 0.8,
+            'has_router': 0.8,
+            'has_endpoint': 1.0,
+            'has_type_hints': 0.7,
+            'has_docstring': 0.3,  # Less critical
+            'has_error_handling': 0.9,
+            'has_pydantic_models': 0.6,
+            'has_response_model': 0.6,
+            'has_status_codes': 0.7,
+            'has_dependencies': 0.5,
+            'has_async_def': 0.3,  # Optional
+            'has_path_params': 0.4,
+            'has_query_params': 0.4,
+            'has_body_models': 0.5
+        }
         
-        # Setup logging
-        logging.basicConfig(level=logging.INFO)
-        self.logger = logging.getLogger(__name__)
-        
-        # Load test cases
-        self.test_cases = self._create_test_cases()
-        
-    def _create_test_cases(self) -> List[FastAPITestCase]:
-        """Create comprehensive test cases for evaluation."""
-        test_cases = []
-        
-        # Basic endpoint test
-        test_cases.append(FastAPITestCase(
-            instruction="Create a simple FastAPI GET endpoint that returns user information",
-            input="The endpoint should accept a user_id parameter",
-            expected_patterns=[
-                r"from fastapi import FastAPI",
-                r"app = FastAPI\(\)",
-                r"@app\.get\(",
-                r"async def.*\(",
-                r"return.*{",
-            ],
-            category="basic",
-            difficulty="beginner",
-            test_type="pattern"
-        ))
-        
-        # Pydantic model test
-        test_cases.append(FastAPITestCase(
-            instruction="Create a FastAPI POST endpoint for user registration with email validation",
-            input="Use Pydantic models for request validation",
-            expected_patterns=[
-                r"from pydantic import BaseModel",
-                r"class.*\(BaseModel\):",
-                r"@app\.post\(",
-                r"async def.*\(",
-                r"EmailStr|email.*str",
-            ],
-            category="models",
-            difficulty="intermediate",
-            test_type="pattern"
-        ))
-        
-        # Database integration test
-        test_cases.append(FastAPITestCase(
-            instruction="Create a FastAPI endpoint to fetch users from database using dependency injection",
-            input="Use SQLAlchemy session dependency",
-            expected_patterns=[
-                r"from.*sqlalchemy",
-                r"Depends\(",
-                r"Session",
-                r"def get_db\(",
-                r"yield db",
-            ],
-            category="database",
-            difficulty="advanced",
-            test_type="pattern"
-        ))
-        
-        # Authentication test
-        test_cases.append(FastAPITestCase(
-            instruction="Create a protected FastAPI endpoint with JWT authentication",
-            input="Use HTTPBearer for token validation",
-            expected_patterns=[
-                r"from fastapi.security import HTTPBearer",
-                r"HTTPBearer\(\)",
-                r"jwt\.|JWT",
-                r"Depends\(",
-                r"HTTPException",
-            ],
-            category="authentication",
-            difficulty="advanced",
-            test_type="pattern"
-        ))
-        
-        # File upload test
-        test_cases.append(FastAPITestCase(
-            instruction="Create a FastAPI endpoint for file upload with size validation",
-            input="Accept image files only, maximum 5MB",
-            expected_patterns=[
-                r"UploadFile",
-                r"File\(",
-                r"async def.*upload",
-                r"\.filename",
-                r"content_type|size",
-            ],
-            category="file-handling",
-            difficulty="intermediate",
-            test_type="pattern"
-        ))
-        
-        return test_cases
-        
-    def evaluate_syntax(self, code: str) -> Tuple[bool, str]:
-        """Check if generated code is syntactically correct."""
-        try:
-            ast.parse(code)
-            return True, "Syntax valid"
-        except SyntaxError as e:
-            return False, f"Syntax error: {str(e)}"
-        except Exception as e:
-            return False, f"Parse error: {str(e)}"
-            
-    def evaluate_patterns(self, code: str, expected_patterns: List[str]) -> Tuple[float, List[str]]:
-        """Check if code contains expected FastAPI patterns."""
-        matched_patterns = []
-        
-        for pattern in expected_patterns:
-            if re.search(pattern, code, re.IGNORECASE | re.MULTILINE):
-                matched_patterns.append(pattern)
-                
-        pattern_score = len(matched_patterns) / len(expected_patterns)
-        return pattern_score, matched_patterns
-        
-    def evaluate_functional(self, code: str) -> Tuple[bool, str]:
-        """Test if FastAPI code can be imported and run (basic functional test)."""
-        try:
-            # Create temporary file
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
-                f.write(code)
-                temp_file = f.name
-            
-            # Try to import and check for basic FastAPI structure
-            try:
-                # Basic validation: check if it's importable
-                result = subprocess.run(
-                    ['python', '-c', f'import ast; ast.parse(open("{temp_file}").read())'],
-                    capture_output=True,
-                    text=True,
-                    timeout=5
-                )
-                
-                if result.returncode == 0:
-                    return True, "Code is importable"
-                else:
-                    return False, f"Import failed: {result.stderr}"
-                    
-            finally:
-                # Clean up
-                Path(temp_file).unlink(missing_ok=True)
-                
-        except Exception as e:
-            return False, f"Functional test failed: {str(e)}"
-            
-    def evaluate_model(
-        self,
-        model_name: str,
-        adapter_path: Optional[str] = None,
-        temperature: float = 0.1,
-        max_new_tokens: int = 512
-    ) -> Dict:
-        """Evaluate a model on FastAPI-specific tasks."""
-        self.logger.info(f"Evaluating model: {model_name}")
-        
-        # Load model
-        tokenizer = AutoTokenizer.from_pretrained(model_name)
-        model = AutoModelForCausalLM.from_pretrained(
-            model_name,
-            device_map="auto",
-            torch_dtype=torch.float16,
-            trust_remote_code=True
+        total_weight = sum(weights.values())
+        weighted_sum = sum(
+            weights[attr] * getattr(self, attr)
+            for attr in weights.keys()
         )
         
-        if adapter_path:
-            self.logger.info(f"Loading adapter: {adapter_path}")
-            model = PeftModel.from_pretrained(model, adapter_path)
-            
-        model.eval()
-        
-        results = {
-            "model_name": model_name,
-            "adapter_path": adapter_path,
-            "timestamp": datetime.now().isoformat(),
-            "test_results": [],
-            "summary": {}
-        }
-        
-        total_tests = len(self.test_cases)
-        syntax_passed = 0
-        pattern_scores = []
-        functional_passed = 0
-        
-        for i, test_case in enumerate(self.test_cases):
-            self.logger.info(f"Running test {i+1}/{total_tests}: {test_case.category}")
-            
-            # Format prompt
-            if test_case.input:
-                prompt = f"[INST] {test_case.instruction}\n\nInput:\n{test_case.input} [/INST]"
-            else:
-                prompt = f"[INST] {test_case.instruction} [/INST]"
-                
-            # Generate code
-            inputs = tokenizer(prompt, return_tensors="pt")
-            if torch.cuda.is_available():
-                inputs = {k: v.cuda() for k, v in inputs.items()}
-                
-            with torch.no_grad():
-                outputs = model.generate(
-                    **inputs,
-                    max_new_tokens=max_new_tokens,
-                    temperature=temperature,
-                    do_sample=temperature > 0,
-                    pad_token_id=tokenizer.eos_token_id
-                )
-                
-            generated_code = tokenizer.decode(outputs[0], skip_special_tokens=True)
-            generated_code = generated_code[len(prompt):].strip()
-            
-            # Evaluate generated code
-            test_result = {
-                "test_case": test_case.__dict__,
-                "generated_code": generated_code,
-                "evaluations": {}
-            }
-            
-            # Syntax evaluation
-            syntax_valid, syntax_msg = self.evaluate_syntax(generated_code)
-            test_result["evaluations"]["syntax"] = {
-                "passed": syntax_valid,
-                "message": syntax_msg
-            }
-            if syntax_valid:
-                syntax_passed += 1
-                
-            # Pattern evaluation
-            pattern_score, matched_patterns = self.evaluate_patterns(
-                generated_code, test_case.expected_patterns
-            )
-            test_result["evaluations"]["patterns"] = {
-                "score": pattern_score,
-                "matched_patterns": matched_patterns,
-                "total_patterns": len(test_case.expected_patterns)
-            }
-            pattern_scores.append(pattern_score)
-            
-            # Functional evaluation (if syntax is valid)
-            if syntax_valid:
-                functional_valid, functional_msg = self.evaluate_functional(generated_code)
-                test_result["evaluations"]["functional"] = {
-                    "passed": functional_valid,
-                    "message": functional_msg
-                }
-                if functional_valid:
-                    functional_passed += 1
-            else:
-                test_result["evaluations"]["functional"] = {
-                    "passed": False,
-                    "message": "Skipped due to syntax error"
-                }
-                
-            results["test_results"].append(test_result)
-            
-        # Calculate summary metrics
-        results["summary"] = {
-            "total_tests": total_tests,
-            "syntax_pass_rate": syntax_passed / total_tests,
-            "average_pattern_score": sum(pattern_scores) / len(pattern_scores),
-            "functional_pass_rate": functional_passed / total_tests,
-            "overall_score": (
-                (syntax_passed / total_tests) * 0.3 +
-                (sum(pattern_scores) / len(pattern_scores)) * 0.4 +
-                (functional_passed / total_tests) * 0.3
-            )
-        }
-        
-        # Save results
-        results_file = self.output_dir / f"evaluation_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
-        with open(results_file, 'w') as f:
-            json.dump(results, f, indent=2)
-            
-        self.logger.info(f"Evaluation complete! Results saved to {results_file}")
-        return results
-        
-    def compare_models(self, baseline_results: Dict, specialist_results: Dict) -> Dict:
-        """Compare specialist model against baseline."""
-        comparison = {
-            "baseline": baseline_results["summary"],
-            "specialist": specialist_results["summary"],
-            "improvements": {}
-        }
-        
-        # Calculate improvements
-        for metric in ["syntax_pass_rate", "average_pattern_score", "functional_pass_rate", "overall_score"]:
-            baseline_score = baseline_results["summary"][metric]
-            specialist_score = specialist_results["summary"][metric]
-            improvement = ((specialist_score - baseline_score) / baseline_score) * 100
-            comparison["improvements"][metric] = improvement
-            
-        return comparison
-        
-    def print_evaluation_summary(self, results: Dict):
-        """Print evaluation summary."""
-        summary = results["summary"]
-        
-        print("\n" + "="*60)
-        print("FASTAPI SPECIALIST EVALUATION RESULTS")
-        print("="*60)
-        print(f"Overall Score: {summary['overall_score']:.3f} ({summary['overall_score']*100:.1f}%)")
-        print(f"Syntax Pass Rate: {summary['syntax_pass_rate']:.3f} ({summary['syntax_pass_rate']*100:.1f}%)")
-        print(f"Pattern Match Score: {summary['average_pattern_score']:.3f} ({summary['average_pattern_score']*100:.1f}%)")
-        print(f"Functional Pass Rate: {summary['functional_pass_rate']:.3f} ({summary['functional_pass_rate']*100:.1f}%)")
-        print(f"Model: {results['model_name']}")
-        if results['adapter_path']:
-            print(f"Adapter: {results['adapter_path']}")
-        print("="*60)
+        return weighted_sum / total_weight
 
-
-if __name__ == "__main__":
-    # Example usage
-    evaluator = FastAPIEvaluator()
+class FastAPIEvaluator:
+    """Evaluates FastAPI code generation responses."""
     
-    # Evaluate base model
-    base_results = evaluator.evaluate_model("codellama/CodeLlama-7b-Instruct-hf")
+    def __init__(self):
+        # Common FastAPI imports and their patterns
+        self.import_patterns = {
+            "fastapi": [r"from\s+fastapi\s+import", r"import\s+fastapi"],
+            "FastAPI": [r"FastAPI"],
+            "APIRouter": [r"APIRouter"],
+            "HTTPException": [r"HTTPException"],
+            "status": [r"status\.HTTP_[0-9]+"],
+            "Response": [r"Response"],
+            "Request": [r"Request"],
+            "Depends": [r"Depends"],
+            "Body": [r"Body"],
+            "Query": [r"Query"],
+            "Path": [r"Path"],
+            "BaseModel": [r"BaseModel"],
+        }
     
-    # Evaluate specialist model (uncomment when you have trained adapter)
-    # specialist_results = evaluator.evaluate_model(
-    #     "codellama/CodeLlama-7b-Instruct-hf",
-    #     adapter_path="outputs/checkpoints"
-    # )
+    def evaluate_response(self, prompt: str, response: str) -> EvaluationResult:
+        """Evaluates a single response."""
+        # First extract actual code from the response
+        code = extract_code_from_markdown(response)
+        result = EvaluationResult(prompt=prompt, response=code)
+        
+        try:
+            # Check if it's valid Python code
+            ast.parse(code)
+            result.is_valid_python = True
+        except SyntaxError as e:
+            result.error_message = f"Invalid Python syntax: {str(e)}"
+            return result
+        
+        # Check for imports and track them
+        for import_name, patterns in self.import_patterns.items():
+            if any(re.search(pattern, code) for pattern in patterns):
+                result.required_imports.add(import_name)
+            else:
+                result.missing_imports.add(import_name)
+        result.has_imports = len(result.required_imports) > 0
+        
+        # Check for router/app initialization
+        result.has_router = bool(re.search(r"(app\s*=\s*FastAPI\(\)|router\s*=\s*APIRouter\(\))", code))
+        
+        # Check for endpoints with improved pattern
+        endpoint_pattern = r"@\s*(app|router)\.(get|post|put|delete|patch)\s*\(\s*['\"]([^'\"]+)['\"]\s*[,)]"
+        endpoints = re.finditer(endpoint_pattern, code)
+        result.extracted_endpoints = []
+        
+        for match in endpoints:
+            decorator, method, path = match.groups()
+            result.extracted_endpoints.append({
+                "decorator": decorator,
+                "method": method.upper(),
+                "path": path
+            })
+        
+        result.has_endpoint = len(result.extracted_endpoints) > 0
+        
+        # Check for type hints with improved pattern
+        type_hint_pattern = r"def\s+\w+\s*\([^)]*:\s*\w+[\[\],\s]*\w*"
+        result.has_type_hints = bool(re.search(type_hint_pattern, code))
+        
+        # Check for docstrings with improved pattern
+        docstring_pattern = r'("""[\s\S]*?"""|\'\'\'[\s\S]*?\'\'\')'
+        result.has_docstring = bool(re.search(docstring_pattern, code))
+        
+        # Enhanced error handling detection
+        error_patterns = [
+            r"HTTPException",
+            r"try\s*:",
+            r"raise\s+\w+",
+            r"status\.HTTP_[45]\d\d",  # 4xx and 5xx status codes
+            r"status_code\s*=\s*[45]\d\d"
+        ]
+        result.has_error_handling = any(bool(re.search(pattern, code)) for pattern in error_patterns)
+        
+        # Check FastAPI best practices
+        for practice in FastAPIBestPractices:
+            attr_name = f"has_{practice.name.lower()}"
+            if hasattr(result, attr_name):
+                setattr(result, attr_name, bool(re.search(practice.value, code)))
+        
+        # Calculate weighted score
+        result.score = result.calculate_score()
+        
+        return result
     
-    # Compare results (uncomment when you have both)
-    # comparison = evaluator.compare_models(base_results, specialist_results)
-    
-    evaluator.print_evaluation_summary(base_results)
+    def format_evaluation_result(self, result: EvaluationResult) -> str:
+        """Formats the evaluation result into a readable string."""
+        output = []
+        output.append("📊 Evaluation Results:")
+        
+        # Basic checks
+        output.append("\n🔍 Basic Checks:")
+        output.append(f"✓ Valid Python: {result.is_valid_python}")
+        if result.error_message:
+            output.append(f"⚠️ Error: {result.error_message}")
+        output.append(f"✓ Has Router/App: {result.has_router}")
+        
+        # Import analysis
+        output.append("\n📦 Import Analysis:")
+        output.append(f"✓ Has Required Imports: {result.has_imports}")
+        if result.required_imports:
+            output.append("  Found imports:")
+            for imp in sorted(result.required_imports):
+                output.append(f"    • {imp}")
+        if result.missing_imports:
+            output.append("  Missing recommended imports:")
+            for imp in sorted(result.missing_imports):
+                output.append(f"    • {imp}")
+        
+        # Endpoint analysis
+        output.append("\n🛣️ Endpoint Analysis:")
+        output.append(f"✓ Has Endpoints: {result.has_endpoint}")
+        if result.extracted_endpoints:
+            output.append("  Endpoints found:")
+            for endpoint in result.extracted_endpoints:
+                output.append(f"    • {endpoint['method']} {endpoint['path']}")
+        
+        # Code quality
+        output.append("\n📝 Code Quality:")
+        output.append(f"✓ Has Type Hints: {result.has_type_hints}")
+        output.append(f"✓ Has Docstrings: {result.has_docstring}")
+        output.append(f"✓ Has Error Handling: {result.has_error_handling}")
+        
+        # FastAPI best practices
+        output.append("\n✨ FastAPI Best Practices:")
+        output.append(f"✓ Uses Pydantic Models: {result.has_pydantic_models}")
+        output.append(f"✓ Specifies Response Models: {result.has_response_model}")
+        output.append(f"✓ Uses Status Codes: {result.has_status_codes}")
+        output.append(f"✓ Uses Dependencies: {result.has_dependencies}")
+        output.append(f"✓ Uses Async Functions: {result.has_async_def}")
+        output.append(f"✓ Has Path Parameters: {result.has_path_params}")
+        output.append(f"✓ Has Query Parameters: {result.has_query_params}")
+        output.append(f"✓ Uses Request/Response Models: {result.has_body_models}")
+        
+        # Final score
+        output.append(f"\n🎯 Overall Score: {result.score:.2%}")
+        
+        return "\n".join(output)
