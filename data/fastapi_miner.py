@@ -1,9 +1,8 @@
 """
-Real FastAPI GitHub Mining Script
+FastAPI GitHub Mining Script.
 
-This script actually mines real FastAPI repositories from GitHub,
+This script mines FastAPI repositories from GitHub,
 extracts code patterns, and generates training examples.
-NO HARD-CODING - everything comes from real repositories.
 """
 
 import json
@@ -22,7 +21,9 @@ from collections import defaultdict
 
 @dataclass
 class ExtractedPattern:
-    """A real code pattern extracted from GitHub."""
+    """
+    A real code pattern extracted from GitHub.
+    """
     code: str
     pattern_type: str
     repo_name: str
@@ -35,7 +36,9 @@ class ExtractedPattern:
 
 
 class RealFastAPIMiner:
-    """Actually mines FastAPI repositories from GitHub."""
+    """
+    Actually mines FastAPI repositories from GitHub.
+    """
     
     def __init__(self, github_token: str):
         """Initialize with GitHub token."""
@@ -47,17 +50,15 @@ class RealFastAPIMiner:
         }
         self.session = requests.Session()
         self.session.headers.update(self.headers)
-        
-        # Setup logging
+
         logging.basicConfig(level=logging.INFO)
         self.logger = logging.getLogger(__name__)
-        
-        # Storage for extracted patterns
+
         self.extracted_patterns: List[ExtractedPattern] = []
         
     def search_fastapi_repositories(self, max_repos: int = 100) -> List[Dict]:
         """Search for real FastAPI repositories on GitHub."""
-        self.logger.info(f"🔍 Searching for FastAPI repositories (max: {max_repos})...")
+        self.logger.info(f"Searching for FastAPI repositories (max: {max_repos})...")
         
         search_queries = [
             "fastapi stars:>100 language:python",
@@ -85,7 +86,7 @@ class RealFastAPIMiner:
         all_repos = []
         
         for query in search_queries:
-            self.logger.info(f"🔍 Searching: {query}")
+            self.logger.info(f"Searching: {query}")
             
             try:
                 url = "https://api.github.com/search/repositories"
@@ -93,7 +94,7 @@ class RealFastAPIMiner:
                     "q": query,
                     "sort": "stars",
                     "order": "desc",
-                    "per_page": 50  # Increased from 20 to get more repos per query
+                    "per_page": 50
                 }
                 
                 response = self.session.get(url, params=params, timeout=30)
