@@ -1,0 +1,5 @@
+{
+    "push_to_hub": true,
+    "hub_strategy": "every_save",
+    "hub_model_id_prefix": "Showmick119/codellama-7b-fastapi-finetuned"
+} 
