@@ -1,12 +1,11 @@
 """
-Script for running LoRA fine-tuning on a pre-trained language model.
+Script for running LoRA fine-tuning on Code Llama.
 """
 
 import json
 import logging
-import os
 from pathlib import Path
-from typing import Optional
+import argparse
 
 import torch
 from transformers import (
@@ -16,12 +15,11 @@ from transformers import (
 )
 from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
 
-from model.load_base_model import ModelLoader
-from data.prepare_dataset import DatasetPreparator
-
 
 def setup_logging(log_dir: Path):
-    """Setup logging configuration."""
+    """
+    Setup logging configuration.
+    """
     log_dir.mkdir(parents=True, exist_ok=True)
     logging.basicConfig(
         level=logging.INFO,
@@ -34,7 +32,9 @@ def setup_logging(log_dir: Path):
 
 
 def load_training_config(config_path: Path) -> dict:
-    """Load training configuration from JSON file."""
+    """
+    Load training configuration from JSON file.
+    """
     with open(config_path, 'r', encoding='utf-8') as f:
         return json.load(f)
 
@@ -50,22 +50,18 @@ def save_training_outputs(output_dir: Path, model, tokenizer, training_args, fin
         training_args: Training arguments used
         final_metrics: Optional dictionary of final training metrics
     """
-    # Save model and tokenizer
     model_dir = output_dir / 'model'
     model_dir.mkdir(parents=True, exist_ok=True)
     model.save_pretrained(model_dir)
     tokenizer.save_pretrained(model_dir)
-    
-    # Save training arguments
+
     with open(output_dir / 'training_args.json', 'w') as f:
         json.dump(training_args.to_dict(), f, indent=2)
-        
-    # Save final metrics if available
+
     if final_metrics:
         with open(output_dir / 'metrics.json', 'w') as f:
             json.dump(final_metrics, f, indent=2)
-            
-    # Save GPU info
+
     if torch.cuda.is_available():
         gpu_info = {
             "device_name": torch.cuda.get_device_name(0),
@@ -97,11 +93,9 @@ def run_training(
     """
     logger = logging.getLogger(__name__)
 
-    # Prepare model for k-bit training
     logger.info("Preparing model for k-bit training")
     model = prepare_model_for_kbit_training(model)
 
-    # Configure LoRA
     logger.info("Configuring LoRA adapter")
     lora_config = LoraConfig(
         r=32,  # attention heads
@@ -112,10 +106,8 @@ def run_training(
         task_type="CAUSAL_LM"
     )
 
-    # Add LoRA adaptor
     model = get_peft_model(model, lora_config)
 
-    # Configure training arguments
     training_args = TrainingArguments(
         output_dir=output_dir,  # Temporary directory in Colab
         num_train_epochs=3,
@@ -133,7 +125,6 @@ def run_training(
         hub_strategy="every_save" if push_to_hub else "no"
     )
 
-    # Create trainer
     trainer = Trainer(
         model=model,
         args=training_args,
@@ -157,8 +148,6 @@ def run_training(
 
 
 if __name__ == "__main__":
-    import argparse
-    
     parser = argparse.ArgumentParser(description="Run LoRA fine-tuning")
     parser.add_argument(
         "--training_config",
@@ -186,9 +175,12 @@ if __name__ == "__main__":
     
     args = parser.parse_args()
     
+    #### VERY BIG GAP BETWEEN WHAT ARGUMENTS YOU HAVE HERE. AND THE FUNCTION'S
+    ### ACTUAL PARAMETERS IN THE FUNCTION DEFINITION.
+    ### IT SHOULD BE SUCH THAT IT DYNAMICALLY LOADS FROM CONFIG FILE
     run_training(
         training_config_path=args.training_config,
         lora_config_path=args.lora_config,
         data_path=args.data_path,
         hub_model_id=args.hub_model_id
-    ) 
+    )
