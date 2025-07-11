@@ -117,7 +117,7 @@ class ModelLoader:
         tokenizer.pad_token = tokenizer.eos_token
         tokenizer.padding_side = "right"
 
-        return base_model, tokenizer
+        return model, tokenizer
 
 
 if __name__ == "__main__":
