@@ -12,7 +12,7 @@ import torch
 from transformers import (
     Trainer,
     TrainingArguments,
-    DataCollatorForLanguageModeling,
+    default_data_collator,
 )
 
 
@@ -134,11 +134,7 @@ def run_training(
         model=model,
         args=training_args,
         train_dataset=dataset,
-        data_collator=DataCollatorForLanguageModeling(
-            tokenizer=tokenizer,
-            mlm=False,
-            pad_to_multiple_of=8,
-        )
+        data_collator=default_data_collator
     )
 
     logger.info("Starting training")

@@ -97,16 +97,16 @@ class DatasetPreparator:
 
             full_text = prompt + output
 
-            # Tokenize without padding - let data collator handle it
+            # Tokenize with FIXED padding to ensure exact same length every time
             tokenized = self.tokenizer(
                 full_text,
                 truncation=True,
                 max_length=self.max_length,
-                padding=False,
+                padding="max_length",  # Force padding to max_length for consistency
                 return_tensors=None,
             )
 
-            # Tokenize just the prompt to know where to mask labels
+            # Tokenize prompt to know where to mask
             prompt_tokenized = self.tokenizer(
                 prompt,
                 truncation=True,
@@ -115,16 +115,17 @@ class DatasetPreparator:
                 return_tensors=None,
             )
             
-            # Create labels by copying input_ids and masking prompt tokens
+            # Create labels with proper masking
             labels = tokenized["input_ids"].copy()
             prompt_length = len(prompt_tokenized["input_ids"])
             
-            # Mask the prompt portion with -100 (ignored in loss calculation)
-            if prompt_length < len(labels):
-                labels[:prompt_length] = [-100] * prompt_length
-            else:
-                # If prompt is longer than max_length, mask everything
-                labels = [-100] * len(labels)
+            # Mask prompt tokens with -100 (ignored in loss calculation)
+            labels[:prompt_length] = [-100] * prompt_length
+            
+            # Ensure exact lengths (this should always pass now)
+            assert len(tokenized["input_ids"]) == self.max_length, f"Input IDs length: {len(tokenized['input_ids'])}"
+            assert len(labels) == self.max_length, f"Labels length: {len(labels)}"
+            assert len(tokenized["attention_mask"]) == self.max_length, f"Attention mask length: {len(tokenized['attention_mask'])}"
             
             model_inputs["input_ids"].append(tokenized["input_ids"])
             model_inputs["labels"].append(labels)
