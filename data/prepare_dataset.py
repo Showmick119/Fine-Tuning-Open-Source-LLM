@@ -129,7 +129,22 @@ class DatasetPreparator:
         Returns:
             Processed dataset ready for training
         """
-        dataset = self.load_and_prepare_dataset()
+        self.logger.info(f"Loading raw dataset from {self.dataset_path}")
+        with open(self.dataset_path, 'r', encoding='utf-8') as f:
+            raw_data = json.load(f)
+
+        dataset_data = []
+        for item in raw_data:
+            dataset_data.append({
+                "instruction": item['instruction'],
+                "input": item.get('input', ''),
+                "output": item['output'],
+                "category": item['category'],
+                "difficulty": item['difficulty']
+            })
+
+        dataset = Dataset.from_list(dataset_data)
+        self.logger.info(f"Created raw dataset with {len(dataset)} examples")
 
         processed_dataset = dataset.map(
             self.preprocess_function,
