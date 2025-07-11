@@ -101,20 +101,29 @@ class DatasetPreparator:
                 full_text,
                 truncation=True,
                 max_length=self.max_length,
-                padding=False,
+                padding="max_length",
                 return_tensors=None,
             )
 
-            prompt_ids = self.tokenizer(
+            prompt_tokenized = self.tokenizer(
                 prompt,
                 truncation=True,
                 max_length=self.max_length,
                 padding=False,
                 return_tensors=None,
-            )["input_ids"]
-            
+            )
+
             labels = tokenized["input_ids"].copy()
-            labels[:len(prompt_ids)] = [-100] * len(prompt_ids)
+            prompt_length = len(prompt_tokenized["input_ids"])
+
+            if prompt_length < len(labels):
+                labels[:prompt_length] = [-100] * prompt_length
+            else:
+                labels = [-100] * len(labels)
+
+            assert len(tokenized["input_ids"]) == self.max_length, f"Input IDs length mismatch: {len(tokenized['input_ids'])} != {self.max_length}"
+            assert len(labels) == self.max_length, f"Labels length mismatch: {len(labels)} != {self.max_length}"
+            assert len(tokenized["attention_mask"]) == self.max_length, f"Attention mask length mismatch: {len(tokenized['attention_mask'])} != {self.max_length}"
             
             model_inputs["input_ids"].append(tokenized["input_ids"])
             model_inputs["labels"].append(labels)
