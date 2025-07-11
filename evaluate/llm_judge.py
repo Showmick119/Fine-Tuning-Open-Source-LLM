@@ -4,13 +4,13 @@ from typing import Dict, List, Any, Optional
 from dataclasses import dataclass, field
 import json
 
-# Set up OpenAI API key
-# Note: In Colab, you should set this as a secret
 openai.api_key = os.getenv('OPENAI_API_KEY')
 
 @dataclass
 class FastAPIReviewCriteria:
-    """Criteria for evaluating FastAPI code."""
+    """
+    Criteria for evaluating FastAPI code.
+    """
     routing_patterns: float = 0.0  # Proper use of routes, HTTP methods
     type_hints: float = 0.0  # Python type hints and Pydantic models
     error_handling: float = 0.0  # HTTPException, status codes
@@ -34,7 +34,9 @@ class FastAPIReviewCriteria:
     })
 
 class GPTFastAPIJudge:
-    """Uses GPT to evaluate FastAPI code quality."""
+    """
+    Uses GPT to evaluate FastAPI code quality.
+    """
     
     def __init__(self):
         self.system_prompt = """You are an expert FastAPI code reviewer. You will evaluate code based on these criteria:
@@ -91,27 +93,23 @@ SUGGESTIONS:
 1. First suggestion
 2. Second suggestion"""
 
-            # Get GPT's evaluation
             messages = [
                 {"role": "system", "content": self.system_prompt},
                 {"role": "user", "content": evaluation_prompt}
             ]
 
             response = openai.chat.completions.create(
-                model="gpt-3.5-turbo",  # Using GPT-3.5 for faster, cheaper evaluation
+                model="gpt-3.5-turbo",  # using GPT-3.5 for faster, cheaper evaluation
                 messages=messages,
-                temperature=0.1,  # Lower temperature for more consistent output
+                temperature=0.1,
                 max_tokens=1000
             )
 
-            # Parse the response
             evaluation_text = response.choices[0].message.content
-            
-            # Initialize result
+
             result = FastAPIReviewCriteria()
             result.suggestions = []
-            
-            # Parse scores and feedback
+
             lines = evaluation_text.split('\n')
             current_section = None
             feedback_buffer = []
@@ -131,19 +129,18 @@ SUGGESTIONS:
                 line = line.strip()
                 if not line:
                     continue
-                
-                # Check for section headers
+
                 section_found = False
                 for header, attr_name in criteria_map.items():
                     if line.startswith(header):
                         section_found = True
-                        # Save previous section's feedback
+
                         if current_section and feedback_buffer:
                             result.detailed_feedback[current_section] = ' '.join(feedback_buffer)
                             feedback_buffer = []
                         
                         current_section = attr_name
-                        # Extract score - looking for pattern like "ROUTING (Score: 85/100):"
+
                         try:
                             score_start = line.find("Score:") + 6
                             score_end = line.find("/")
@@ -156,26 +153,24 @@ SUGGESTIONS:
                 
                 if not section_found:
                     if current_section and not line.startswith("SUGGESTIONS:"):
-                        # If line doesn't start with a header and we're in a section, it's feedback
+
                         if not any(line.startswith(h) for h in criteria_map.keys()):
                             feedback_buffer.append(line)
                     elif line.startswith("SUGGESTIONS:"):
-                        # Save any pending feedback
+
                         if current_section and feedback_buffer:
                             result.detailed_feedback[current_section] = ' '.join(feedback_buffer)
                         current_section = None
                         feedback_buffer = []
                     elif line.startswith(("1.", "2.", "3.")):
-                        # Collect actual suggestions
+
                         suggestion = line.lstrip("123. ").strip()
                         if suggestion and suggestion != "First suggestion" and suggestion != "Second suggestion":
                             result.suggestions.append(suggestion)
-            
-            # Save feedback from the last section
+
             if current_section and feedback_buffer:
                 result.detailed_feedback[current_section] = ' '.join(feedback_buffer)
-            
-            # Calculate total score using weights
+
             weighted_sum = 0
             for criterion, weight in result.criterion_weights.items():
                 criterion_score = getattr(result, criterion, 0)
@@ -186,7 +181,6 @@ SUGGESTIONS:
             return result
             
         except Exception as e:
-            # Handle any API errors
             result = FastAPIReviewCriteria()
             result.detailed_feedback = f"Evaluation failed: {str(e)}"
             result.score = 0
@@ -196,14 +190,12 @@ SUGGESTIONS:
 def format_gpt_evaluation(result: FastAPIReviewCriteria) -> str:
     """Formats the GPT evaluation result into a readable string."""
     output = []
-    output.append("🤖 GPT FastAPI Code Review")
+    output.append("GPT FastAPI Code Review")
     output.append("=" * 40)
-    
-    # Overall Score
-    output.append(f"📊 Overall Score: {result.total_score:.1f}/100")
-    
-    # Criteria Scores
-    output.append("\n✨ Criteria Scores:")
+
+    output.append(f"Overall Score: {result.total_score:.1f}/100")
+
+    output.append("\nCriteria Scores:")
     criteria = {
         "Routing Patterns": result.routing_patterns,
         "Type Hints": result.type_hints,
@@ -220,10 +212,9 @@ def format_gpt_evaluation(result: FastAPIReviewCriteria) -> str:
         output.append(f"{check_mark} {criterion_name}: {score:.1f}/100 (Weight: {result.criterion_weights[criterion_name.lower().replace(' ', '_')]:.2f})")
         if criterion_name.lower().replace(' ', '_') in result.detailed_feedback:
             output.append(f"   └─ {result.detailed_feedback[criterion_name.lower().replace(' ', '_')]}")
-    
-    # Suggestions
+
     if result.suggestions:
-        output.append("\n💡 Suggested Improvements:")
+        output.append("\nSuggested Improvements:")
         for i, suggestion in enumerate(result.suggestions, 1):
             output.append(f"{i}. {suggestion}")
     

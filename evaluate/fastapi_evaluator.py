@@ -14,7 +14,9 @@ from dataclasses import dataclass, field
 from enum import Enum
 
 class FastAPIBestPractices(Enum):
-    """Enum for FastAPI best practices patterns"""
+    """
+    Enum for FastAPI best practices patterns.
+    """
     PYDANTIC_MODELS = r"class\s+\w+(\w*Model|\w*Schema|\w*Request|\w*Response)"
     RESPONSE_MODEL = r"@\w+\.\w+\([^)]*response_model\s*="
     STATUS_CODES = r"(status_code\s*=|status\.\w+)"
@@ -25,18 +27,15 @@ class FastAPIBestPractices(Enum):
     BODY_MODELS = r"(\w+\s*:\s*\w+Model|\w+\s*:\s*\w+Schema)"
 
 def extract_code_from_markdown(text: str) -> str:
-    """Extract Python code from markdown-formatted text with code blocks."""
-    # Find content between triple backticks
+    """
+    Extract Python code from markdown-formatted text with code blocks.
+    """
     code_blocks = re.findall(r'```(?:python)?(.*?)```', text, re.DOTALL)
     if code_blocks:
-        # Return the first code block found
         return code_blocks[0].strip()
-    # If no code blocks found, try to find the code directly
-    # Remove any explanatory text that comes before or after the code
+
     if 'from fastapi import' in text:
-        # Find the first import statement and everything after it
         code = text[text.find('from fastapi import'):]
-        # Remove any explanatory text that might come after the code
         if 'This endpoint' in code:
             code = code[:code.find('This endpoint')]
         return code.strip()
@@ -44,7 +43,9 @@ def extract_code_from_markdown(text: str) -> str:
 
 @dataclass
 class EvaluationResult:
-    """Stores the evaluation results for a single test case."""
+    """
+    Stores the evaluation results for a single test case.
+    """
     prompt: str
     response: str
     is_valid_python: bool = False
@@ -69,20 +70,22 @@ class EvaluationResult:
     error_message: Optional[str] = None
     
     def calculate_score(self) -> float:
-        """Calculate weighted score based on various criteria."""
+        """
+        Calculate weighted score based on various criteria.
+        """
         weights = {
             'is_valid_python': 1.0,
             'has_imports': 0.8,
             'has_router': 0.8,
             'has_endpoint': 1.0,
             'has_type_hints': 0.7,
-            'has_docstring': 0.3,  # Less critical
+            'has_docstring': 0.3,
             'has_error_handling': 0.9,
             'has_pydantic_models': 0.6,
             'has_response_model': 0.6,
             'has_status_codes': 0.7,
             'has_dependencies': 0.5,
-            'has_async_def': 0.3,  # Optional
+            'has_async_def': 0.3,
             'has_path_params': 0.4,
             'has_query_params': 0.4,
             'has_body_models': 0.5
@@ -97,10 +100,11 @@ class EvaluationResult:
         return weighted_sum / total_weight
 
 class FastAPIEvaluator:
-    """Evaluates FastAPI code generation responses."""
+    """
+    Evaluates FastAPI code generation responses.
+    """
     
     def __init__(self):
-        # Common FastAPI imports and their patterns
         self.import_patterns = {
             "fastapi": [r"from\s+fastapi\s+import", r"import\s+fastapi"],
             "FastAPI": [r"FastAPI"],
@@ -117,31 +121,28 @@ class FastAPIEvaluator:
         }
     
     def evaluate_response(self, prompt: str, response: str) -> EvaluationResult:
-        """Evaluates a single response."""
-        # First extract actual code from the response
+        """
+        Evaluates a single response.
+        """
         code = extract_code_from_markdown(response)
         result = EvaluationResult(prompt=prompt, response=code)
         
         try:
-            # Check if it's valid Python code
             ast.parse(code)
             result.is_valid_python = True
         except SyntaxError as e:
             result.error_message = f"Invalid Python syntax: {str(e)}"
             return result
-        
-        # Check for imports and track them
+
         for import_name, patterns in self.import_patterns.items():
             if any(re.search(pattern, code) for pattern in patterns):
                 result.required_imports.add(import_name)
             else:
                 result.missing_imports.add(import_name)
         result.has_imports = len(result.required_imports) > 0
-        
-        # Check for router/app initialization
+
         result.has_router = bool(re.search(r"(app\s*=\s*FastAPI\(\)|router\s*=\s*APIRouter\(\))", code))
-        
-        # Check for endpoints with improved pattern
+
         endpoint_pattern = r"@\s*(app|router)\.(get|post|put|delete|patch)\s*\(\s*['\"]([^'\"]+)['\"]\s*[,)]"
         endpoints = re.finditer(endpoint_pattern, code)
         result.extracted_endpoints = []
@@ -155,50 +156,45 @@ class FastAPIEvaluator:
             })
         
         result.has_endpoint = len(result.extracted_endpoints) > 0
-        
-        # Check for type hints with improved pattern
+
         type_hint_pattern = r"def\s+\w+\s*\([^)]*:\s*\w+[\[\],\s]*\w*"
         result.has_type_hints = bool(re.search(type_hint_pattern, code))
-        
-        # Check for docstrings with improved pattern
+
         docstring_pattern = r'("""[\s\S]*?"""|\'\'\'[\s\S]*?\'\'\')'
         result.has_docstring = bool(re.search(docstring_pattern, code))
-        
-        # Enhanced error handling detection
+
         error_patterns = [
             r"HTTPException",
             r"try\s*:",
             r"raise\s+\w+",
-            r"status\.HTTP_[45]\d\d",  # 4xx and 5xx status codes
+            r"status\.HTTP_[45]\d\d",
             r"status_code\s*=\s*[45]\d\d"
         ]
         result.has_error_handling = any(bool(re.search(pattern, code)) for pattern in error_patterns)
-        
-        # Check FastAPI best practices
+
         for practice in FastAPIBestPractices:
             attr_name = f"has_{practice.name.lower()}"
             if hasattr(result, attr_name):
                 setattr(result, attr_name, bool(re.search(practice.value, code)))
-        
-        # Calculate weighted score
+
         result.score = result.calculate_score()
         
         return result
     
     def format_evaluation_result(self, result: EvaluationResult) -> str:
-        """Formats the evaluation result into a readable string."""
+        """
+        Formats the evaluation result into a readable string.
+        """
         output = []
-        output.append("📊 Evaluation Results:")
-        
-        # Basic checks
-        output.append("\n🔍 Basic Checks:")
+        output.append("Evaluation Results:")
+
+        output.append("\nBasic Checks:")
         output.append(f"✓ Valid Python: {result.is_valid_python}")
         if result.error_message:
-            output.append(f"⚠️ Error: {result.error_message}")
+            output.append(f"Error: {result.error_message}")
         output.append(f"✓ Has Router/App: {result.has_router}")
-        
-        # Import analysis
-        output.append("\n📦 Import Analysis:")
+
+        output.append("\nImport Analysis:")
         output.append(f"✓ Has Required Imports: {result.has_imports}")
         if result.required_imports:
             output.append("  Found imports:")
@@ -208,23 +204,20 @@ class FastAPIEvaluator:
             output.append("  Missing recommended imports:")
             for imp in sorted(result.missing_imports):
                 output.append(f"    • {imp}")
-        
-        # Endpoint analysis
-        output.append("\n🛣️ Endpoint Analysis:")
+
+        output.append("\nEndpoint Analysis:")
         output.append(f"✓ Has Endpoints: {result.has_endpoint}")
         if result.extracted_endpoints:
             output.append("  Endpoints found:")
             for endpoint in result.extracted_endpoints:
                 output.append(f"    • {endpoint['method']} {endpoint['path']}")
-        
-        # Code quality
-        output.append("\n📝 Code Quality:")
+
+        output.append("\nCode Quality:")
         output.append(f"✓ Has Type Hints: {result.has_type_hints}")
         output.append(f"✓ Has Docstrings: {result.has_docstring}")
         output.append(f"✓ Has Error Handling: {result.has_error_handling}")
-        
-        # FastAPI best practices
-        output.append("\n✨ FastAPI Best Practices:")
+
+        output.append("\nFastAPI Best Practices:")
         output.append(f"✓ Uses Pydantic Models: {result.has_pydantic_models}")
         output.append(f"✓ Specifies Response Models: {result.has_response_model}")
         output.append(f"✓ Uses Status Codes: {result.has_status_codes}")
@@ -233,8 +226,7 @@ class FastAPIEvaluator:
         output.append(f"✓ Has Path Parameters: {result.has_path_params}")
         output.append(f"✓ Has Query Parameters: {result.has_query_params}")
         output.append(f"✓ Uses Request/Response Models: {result.has_body_models}")
-        
-        # Final score
-        output.append(f"\n🎯 Overall Score: {result.score:.2%}")
+
+        output.append(f"\nOverall Score: {result.score:.2%}")
         
         return "\n".join(output)
