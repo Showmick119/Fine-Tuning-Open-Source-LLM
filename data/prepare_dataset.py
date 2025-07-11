@@ -97,14 +97,16 @@ class DatasetPreparator:
 
             full_text = prompt + output
 
+            # Tokenize without padding - let data collator handle it
             tokenized = self.tokenizer(
                 full_text,
                 truncation=True,
                 max_length=self.max_length,
-                padding="max_length",
+                padding=False,
                 return_tensors=None,
             )
 
+            # Tokenize just the prompt to know where to mask labels
             prompt_tokenized = self.tokenizer(
                 prompt,
                 truncation=True,
@@ -112,18 +114,17 @@ class DatasetPreparator:
                 padding=False,
                 return_tensors=None,
             )
-
+            
+            # Create labels by copying input_ids and masking prompt tokens
             labels = tokenized["input_ids"].copy()
             prompt_length = len(prompt_tokenized["input_ids"])
-
+            
+            # Mask the prompt portion with -100 (ignored in loss calculation)
             if prompt_length < len(labels):
                 labels[:prompt_length] = [-100] * prompt_length
             else:
+                # If prompt is longer than max_length, mask everything
                 labels = [-100] * len(labels)
-
-            assert len(tokenized["input_ids"]) == self.max_length, f"Input IDs length mismatch: {len(tokenized['input_ids'])} != {self.max_length}"
-            assert len(labels) == self.max_length, f"Labels length mismatch: {len(labels)} != {self.max_length}"
-            assert len(tokenized["attention_mask"]) == self.max_length, f"Attention mask length mismatch: {len(tokenized['attention_mask'])} != {self.max_length}"
             
             model_inputs["input_ids"].append(tokenized["input_ids"])
             model_inputs["labels"].append(labels)
