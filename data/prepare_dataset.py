@@ -28,7 +28,7 @@ class DatasetPreparator:
         Load and prepare the FastAPI dataset for fine-tuning.
 
         Returns:
-            FastAPI data wrapped inside a Dataset object.
+            FastAPI data wrapped inside a Dataset object from the transformers library.
         """
         self.logger.info(f"Loading dataset from {self.dataset_path}")
         with open(self.dataset_path, 'r', encoding='utf-8') as f:
