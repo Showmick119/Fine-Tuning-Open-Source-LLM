@@ -5,6 +5,7 @@ Module for preparing and preprocessing FastAPI training dataset.
 from typing import Dict, List
 import json
 import logging
+import re
 
 from datasets import Dataset
 
@@ -22,6 +23,55 @@ class DatasetPreparator:
         """
         self.dataset_path = dataset_path
         self.logger = logging.getLogger(__name__)
+
+    def enhance_code_snippet(self, code: str) -> str:
+        """
+        Enhance incomplete code snippets by adding proper imports and structure.
+        
+        Args:
+            code: Raw code snippet that may be incomplete
+            
+        Returns:
+            Complete FastAPI code with proper imports and structure
+        """
+        code = code.strip()
+        
+        # Check if code already has imports
+        has_fastapi_import = bool(re.search(r"from\s+fastapi\s+import|import\s+fastapi", code, re.IGNORECASE))
+        has_app_instance = bool(re.search(r"app\s*=\s*FastAPI\s*\(", code, re.IGNORECASE))
+        
+        # Start building the enhanced code
+        enhanced_code = []
+        
+        # Add necessary imports if missing
+        if not has_fastapi_import:
+            enhanced_code.append("from fastapi import FastAPI, HTTPException, Depends, status")
+            
+        # Add common imports based on code content
+        if "Session" in code and "sqlalchemy" not in code.lower():
+            enhanced_code.append("from sqlalchemy.orm import Session")
+        if "JSONResponse" in code:
+            enhanced_code.append("from fastapi.responses import JSONResponse")
+        if "RedirectResponse" in code:
+            enhanced_code.append("from fastapi.responses import RedirectResponse")
+        if "List[" in code or "Dict[" in code:
+            enhanced_code.append("from typing import List, Dict, Any")
+        if "BaseModel" in code:
+            enhanced_code.append("from pydantic import BaseModel")
+        
+        # Add empty line after imports
+        if enhanced_code:
+            enhanced_code.append("")
+        
+        # Add app instance if missing
+        if not has_app_instance and "@app." in code:
+            enhanced_code.append("app = FastAPI()")
+            enhanced_code.append("")
+        
+        # Add the original code
+        enhanced_code.append(code)
+        
+        return "\n".join(enhanced_code)
 
     def load_and_prepare_dataset(self) -> Dataset:
         """
@@ -42,9 +92,15 @@ class DatasetPreparator:
             if input_text:
                 instruction += f"\n\nInput:\n{input_text}"
 
+            # Enhance the output code to be complete and runnable
+            enhanced_output = self.enhance_code_snippet(item['output'])
+
             processed_data.append({
                 "instruction": instruction,
-                "output": item['output']
+                "input": input_text,
+                "output": enhanced_output,
+                "category": item['category'],
+                "difficulty": item['difficulty']
             })
 
         dataset = Dataset.from_list(processed_data)
@@ -101,70 +157,61 @@ class DatasetPreparator:
             tokenized = self.tokenizer(
                 full_text,
                 truncation=True,
+                padding="max_length",
                 max_length=self.max_length,
-                padding="max_length",  # Force padding to max_length for consistency
-                return_tensors=None,
+                return_tensors="pt"
             )
 
-            # Tokenize prompt to know where to mask
+            input_ids = tokenized["input_ids"].squeeze()
+            attention_mask = tokenized["attention_mask"].squeeze()
+
+            # Find where the prompt ends and the output begins
             prompt_tokenized = self.tokenizer(
                 prompt,
                 truncation=True,
-                max_length=self.max_length,
                 padding=False,
-                return_tensors=None,
+                max_length=self.max_length,
+                return_tensors="pt"
             )
-            
-            # Create labels with proper masking
-            labels = tokenized["input_ids"].copy()
-            prompt_length = len(prompt_tokenized["input_ids"])
-            
-            # Mask prompt tokens with -100 (ignored in loss calculation)
-            labels[:prompt_length] = [-100] * prompt_length
-            
-            # Ensure exact lengths (this should always pass now)
-            assert len(tokenized["input_ids"]) == self.max_length, f"Input IDs length: {len(tokenized['input_ids'])}"
-            assert len(labels) == self.max_length, f"Labels length: {len(labels)}"
-            assert len(tokenized["attention_mask"]) == self.max_length, f"Attention mask length: {len(tokenized['attention_mask'])}"
-            
-            model_inputs["input_ids"].append(tokenized["input_ids"])
+            prompt_length = prompt_tokenized["input_ids"].shape[1]
+
+            # Create labels - mask the prompt tokens with -100
+            labels = input_ids.clone()
+            labels[:prompt_length] = -100
+
+            model_inputs["input_ids"].append(input_ids)
+            model_inputs["attention_mask"].append(attention_mask)
             model_inputs["labels"].append(labels)
-            model_inputs["attention_mask"].append(tokenized["attention_mask"])
-        
+
         return model_inputs
-    
+
     def prepare_dataset(self) -> Dataset:
         """
-        Prepare the FastAPI dataset for training.
-            
+        Prepare the dataset for training by applying preprocessing function.
+        
         Returns:
-            Processed dataset ready for training
+            Dataset: Processed dataset ready for training.
         """
-        self.logger.info(f"Loading raw dataset from {self.dataset_path}")
-        with open(self.dataset_path, 'r', encoding='utf-8') as f:
-            raw_data = json.load(f)
+        if not hasattr(self, 'tokenizer'):
+            raise AttributeError("Tokenizer not set. Please set self.tokenizer before calling prepare_dataset()")
+        
+        if not hasattr(self, 'max_length'):
+            self.max_length = 512
+            self.logger.warning("max_length not set. Using default value of 512")
 
-        dataset_data = []
-        for item in raw_data:
-            dataset_data.append({
-                "instruction": item['instruction'],
-                "input": item.get('input', ''),
-                "output": item['output'],
-                "category": item['category'],
-                "difficulty": item['difficulty']
-            })
+        self.logger.info("Loading and preparing dataset...")
+        dataset = self.load_and_prepare_dataset()
 
-        dataset = Dataset.from_list(dataset_data)
-        self.logger.info(f"Created raw dataset with {len(dataset)} examples")
-
-        processed_dataset = dataset.map(
+        self.logger.info("Tokenizing dataset...")
+        dataset = dataset.map(
             self.preprocess_function,
             batched=True,
             remove_columns=dataset.column_names,
-            desc="Preprocessing FastAPI examples",
+            desc="Preprocessing FastAPI examples"
         )
-        
-        return processed_dataset
+
+        self.logger.info(f"Dataset prepared with {len(dataset)} examples")
+        return dataset
 
 
 if __name__ == "__main__":

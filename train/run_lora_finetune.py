@@ -90,13 +90,10 @@ def run_training(
     output_dir="./results"
 ):
     """
-    Run LoRA fine-tuning on the model using configuration files.
-    
-    Note: Model should already be quantized and have LoRA adapters applied
-    via the ModelLoader class before calling this function.
-    
+    Run LoRA fine-tuning with comprehensive logging and configuration.
+
     Args:
-        model: The model to fine-tune (already with LoRA adapters).
+        model: Model to train.
         tokenizer: The tokenizer.
         dataset: Training dataset.
         training_config_path: Path to training arguments JSON config.
@@ -130,10 +127,25 @@ def run_training(
     
     training_args = TrainingArguments(**training_config_dict)
 
+    # Split dataset for evaluation if eval_strategy is not "no"
+    train_dataset = dataset
+    eval_dataset = None
+    
+    if training_args.eval_strategy != "no":
+        logger.info("Splitting dataset for evaluation")
+        dataset_split = dataset.train_test_split(test_size=0.1, seed=42)
+        train_dataset = dataset_split["train"]
+        eval_dataset = dataset_split["test"]
+        logger.info(f"Training examples: {len(train_dataset)}")
+        logger.info(f"Evaluation examples: {len(eval_dataset)}")
+    else:
+        logger.info(f"Training examples: {len(train_dataset)}")
+
     trainer = Trainer(
         model=model,
         args=training_args,
-        train_dataset=dataset,
+        train_dataset=train_dataset,
+        eval_dataset=eval_dataset,
         data_collator=default_data_collator
     )
 
