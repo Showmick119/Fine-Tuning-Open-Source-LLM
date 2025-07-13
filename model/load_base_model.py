@@ -42,7 +42,7 @@ DEFAULT_CONFIG = {
 
 class ModelLoader:
     """
-    Handles loading and configuring the base model with LoRA.
+    Handles loading and configuring the base model with or without LoRA adapters.
     """
 
     def __init__(self, config_path: Optional[Union[str, Path]] = None):
@@ -81,12 +81,12 @@ class ModelLoader:
         if missing_lora:
             raise ValueError(f"Missing required LoRA config fields: {missing_lora}")
 
-    def load_model_and_tokenizer(self) -> Tuple[AutoModelForCausalLM, AutoTokenizer]:
+    def _load_base_model_with_quantization(self) -> AutoModelForCausalLM:
         """
-        Load the base model and tokenizer with optimized settings for fine-tuning.
-
+        Load the base model with quantization configuration.
+        
         Returns:
-            Returns a tuple of the Code Llama model and tokenizer with LoRA and quantization configurations.
+            The quantized base model.
         """
         bnb_config = BitsAndBytesConfig(
             load_in_4bit=self.config["load_in_4bit"],
@@ -103,12 +103,16 @@ class ModelLoader:
             trust_remote_code=True,
             torch_dtype=getattr(torch, self.config["torch_dtype"])
         )
+        
+        return model
 
-        model = prepare_model_for_kbit_training(model)
-
-        lora_config = LoraConfig(**self.config["lora_config"])
-        model = get_peft_model(model, lora_config)
-
+    def _load_tokenizer(self) -> AutoTokenizer:
+        """
+        Load the tokenizer for the model.
+        
+        Returns:
+            The configured tokenizer.
+        """
         self.logger.info("Loading tokenizer")
         tokenizer = AutoTokenizer.from_pretrained(
             self.config['base_model_name'],
@@ -116,17 +120,63 @@ class ModelLoader:
         )
         tokenizer.pad_token = tokenizer.eos_token
         tokenizer.padding_side = "right"
+        
+        return tokenizer
 
+    def load_model_and_tokenizer(self, apply_lora: bool = True) -> Tuple[AutoModelForCausalLM, AutoTokenizer]:
+        """
+        Load the model and tokenizer with optional LoRA configuration.
+
+        Args:
+            apply_lora: Whether to apply LoRA adapters to the model. If False, loads only the quantized base model.
+
+        Returns:
+            Returns a tuple of the Code Llama model and tokenizer with optional LoRA and quantization configurations.
+        """
+        model = self._load_base_model_with_quantization()
+        
+        if apply_lora:
+            model = prepare_model_for_kbit_training(model)
+            lora_config = LoraConfig(**self.config["lora_config"])
+            model = get_peft_model(model, lora_config)
+            self.logger.info("LoRA adapters applied to model")
+        else:
+            self.logger.info("Loading base model without LoRA adapters")
+
+        tokenizer = self._load_tokenizer()
+        
         return model, tokenizer
+
+    def load_base_model_only(self) -> Tuple[AutoModelForCausalLM, AutoTokenizer]:
+        """
+        Load only the quantized base model without LoRA adapters.
+        
+        Returns:
+            Returns a tuple of the quantized base model and tokenizer.
+        """
+        return self.load_model_and_tokenizer(apply_lora=False)
+
+    def load_finetuned_model(self) -> Tuple[AutoModelForCausalLM, AutoTokenizer]:
+        """
+        Load the model with LoRA adapters for fine-tuning.
+        
+        Returns:
+            Returns a tuple of the model with LoRA adapters and tokenizer.
+        """
+        return self.load_model_and_tokenizer(apply_lora=True)
 
 
 if __name__ == "__main__":
     loader = ModelLoader("configs/lora_config.json")
 
-    base_model, tokenizer = loader.load_model_and_tokenizer()
-    
-    print("Model loading complete")
+    print("Loading base model...")
+    base_model, tokenizer = loader.load_base_model_only()
+    print("Base model loading complete")
+
+    print("\nLoading fine-tuned model...")
+    finetuned_model, _ = loader.load_finetuned_model()
+    print("Fine-tuned model loading complete")
 
     if torch.cuda.is_available():
-        print(f"GPU Memory Used: {torch.cuda.memory_allocated() / 1e9:.2f}GB")
+        print(f"\nGPU Memory Used: {torch.cuda.memory_allocated() / 1e9:.2f}GB")
         print(f"GPU Memory Reserved: {torch.cuda.memory_reserved() / 1e9:.2f}GB") 
