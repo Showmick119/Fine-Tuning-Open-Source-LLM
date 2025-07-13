@@ -53,9 +53,10 @@ class DatasetPreparator:
         if not has_fastapi_import:
             fastapi_imports = []
             
-            # Core FastAPI imports - only add if used
-            if "FastAPI" in code:
-                fastapi_imports.append("FastAPI")
+            # FastAPI is ALWAYS needed for any FastAPI application
+            fastapi_imports.append("FastAPI")
+            
+            # Other imports - only add if used
             if "HTTPException" in code:
                 fastapi_imports.append("HTTPException")
             if "Depends(" in code:  # Only if actually used as function call
@@ -167,7 +168,7 @@ class DatasetPreparator:
     def create_augmented_examples(self, example: dict) -> list:
         """
         Create multiple variations of a single example to increase dataset size.
-        Only adds realistic variations that don't reinforce hardcoded patterns.
+        Balanced approach - not too aggressive, not too conservative.
         
         Args:
             example: Original example dictionary
@@ -177,16 +178,19 @@ class DatasetPreparator:
         """
         augmented = [example]  # Include original
         
-        # Skip augmentation for very complex examples (to avoid noise)
-        if example.get('complexity_score', 0) > 20:
+        # Skip augmentation for extremely complex examples (raised threshold)
+        if example.get('complexity_score', 0) > 35:
             return augmented
         
         original_output = example['output']
         
-        # Variation 1: Add more detailed error handling - only for database operations
+        # Variation 1: Add more detailed error handling - more flexible conditions
         if 'HTTPException' in original_output and 'try:' not in original_output:
-            # Only add error handling if it's a database/IO operation
-            if any(keyword in original_output.lower() for keyword in ['save()', 'delete()', 'first()', 'objects(', 'create(', 'update(']):
+            # Add error handling if it's a database/IO operation OR if it's intermediate/advanced
+            database_operation = any(keyword in original_output.lower() for keyword in ['save()', 'delete()', 'first()', 'objects(', 'create(', 'update(', 'db.', 'session'])
+            is_complex = example.get('difficulty', 'beginner') in ['intermediate', 'advanced']
+            
+            if database_operation or is_complex:
                 enhanced_output = original_output.replace(
                     'raise HTTPException(',
                     'try:\n        # Database operation\n        pass\n    except Exception as e:\n        raise HTTPException('
@@ -198,11 +202,12 @@ class DatasetPreparator:
                     'difficulty': 'intermediate' if example['difficulty'] == 'beginner' else example['difficulty']
                 })
         
-        # Variation 2: Add response models for GET endpoints - only when appropriate
+        # Variation 2: Add response models - more flexible conditions  
         if '@app.get(' in original_output or '@router.get(' in original_output:
             if 'response_model=' not in original_output and 'List[' not in original_output:
-                # Only add response models for data-returning endpoints
-                if 'return {' in original_output or 'return [' in original_output:
+                # Add response models for data-returning endpoints OR simple dict returns
+                returns_data = 'return {' in original_output or 'return [' in original_output or 'return ' in original_output
+                if returns_data:
                     augmented.append({
                         **example,
                         'instruction': example['instruction'] + '\nInclude proper response model typing',
@@ -212,22 +217,30 @@ class DatasetPreparator:
                         'category': 'models'
                     })
         
-        # Variation 3: Add async version for I/O operations only
+        # Variation 3: Add async version - more flexible conditions
         if 'async def' not in original_output and 'Session' not in original_output:
-            # Only make async if it's doing I/O operations
-            if any(keyword in original_output.lower() for keyword in ['save()', 'delete()', 'first()', 'objects(', 'create(', 'update(', 'database', 'db']):
+            # Make async if it's doing I/O operations OR if it's database category OR intermediate+
+            has_io = any(keyword in original_output.lower() for keyword in ['save()', 'delete()', 'first()', 'objects(', 'create(', 'update(', 'database', 'db.', 'session'])
+            is_database_category = example.get('category', '') == 'database'
+            is_intermediate_plus = example.get('difficulty', 'beginner') in ['intermediate', 'advanced']
+            
+            if has_io or is_database_category or is_intermediate_plus:
                 async_output = original_output.replace('def ', 'async def ')
                 augmented.append({
                     **example,
-                    'instruction': example['instruction'] + '\nImplement as async function for database operations',
+                    'instruction': example['instruction'] + '\nImplement as async function for better performance',
                     'output': async_output,
                     'tags': example.get('tags', []) + ['async']
                 })
         
-        # Variation 4: Add dependency injection pattern - only for auth-related endpoints
-        if 'Depends(' not in original_output and len(original_output.split('\n')) < 8:
-            # Only add dependencies for endpoints that should logically need authentication
-            if any(keyword in example.get('instruction', '').lower() for keyword in ['user', 'auth', 'login', 'protected', 'profile', 'account']):
+        # Variation 4: Add dependency injection - more flexible conditions
+        if 'Depends(' not in original_output and len(original_output.split('\n')) < 15:
+            # Add dependencies for auth-related endpoints OR protected endpoints OR intermediate+
+            needs_auth = any(keyword in example.get('instruction', '').lower() for keyword in ['user', 'auth', 'login', 'protected', 'profile', 'account', 'secure'])
+            is_auth_category = example.get('category', '') == 'authentication'
+            is_intermediate_plus = example.get('difficulty', 'beginner') in ['intermediate', 'advanced']
+            
+            if needs_auth or is_auth_category or is_intermediate_plus:
                 dependency_output = original_output
                 if 'def ' in dependency_output:
                     func_line = [line for line in dependency_output.split('\n') if 'def ' in line][0]
@@ -241,6 +254,27 @@ class DatasetPreparator:
                     'input': example.get('input', '') + '\nRequire authenticated user',
                     'output': dependency_output,
                     'category': 'auth'
+                })
+        
+        # Variation 5: Add status code usage - new variation
+        if 'status_code=' not in original_output and 'status.HTTP_' not in original_output:
+            if '@app.post(' in original_output or '@router.post(' in original_output:
+                # Add status codes for POST endpoints
+                status_output = original_output.replace(
+                    '@app.post(', '@app.post('
+                ).replace(
+                    '@router.post(', '@router.post('
+                )
+                # Add status_code parameter to decorator
+                if 'status_code=' not in status_output:
+                    status_output = status_output.replace(
+                        ')', ', status_code=status.HTTP_201_CREATED)')
+                
+                augmented.append({
+                    **example,
+                    'instruction': example['instruction'] + '\nInclude proper HTTP status codes',
+                    'output': status_output,
+                    'category': 'validation'
                 })
         
         return augmented
