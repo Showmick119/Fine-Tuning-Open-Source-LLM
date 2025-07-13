@@ -2,7 +2,6 @@ import os
 import openai
 from typing import Dict, List, Any, Optional
 from dataclasses import dataclass, field
-import json
 
 openai.api_key = os.getenv('OPENAI_API_KEY')
 
@@ -41,57 +40,60 @@ class GPTFastAPIJudge:
     def __init__(self):
         self.system_prompt = """You are an expert FastAPI code reviewer. You will evaluate code based on these criteria:
 
-ROUTING (15%): Path operations, HTTP methods, route organization
-TYPES (15%): Type hints, Pydantic models, type safety
-ERRORS (15%): HTTPException, status codes, error responses
-VALIDATION (15%): Request models, query/path params, input validation
-RESPONSES (10%): Response schemas, status codes, response typing
-DEPENDENCIES (10%): Depends usage, dependency patterns
-DOCS (10%): Docstrings, OpenAPI/Swagger docs, comments
-PRACTICES (10%): FastAPI conventions, code organization
+        ROUTING (15%): Path operations, HTTP methods, route organization
+        TYPES (15%): Type hints, Pydantic models, type safety
+        ERRORS (15%): HTTPException, status codes, error responses
+        VALIDATION (15%): Request models, query/path params, input validation
+        RESPONSES (10%): Response schemas, status codes, response typing
+        DEPENDENCIES (10%): Depends usage, dependency patterns
+        DOCS (10%): Docstrings, OpenAPI/Swagger docs, comments
+        PRACTICES (10%): FastAPI conventions, code organization
 
-For each criterion, provide a score (0-100) and brief feedback.
-Format your response exactly as shown in the user's prompt."""
+        For each criterion, provide a score (0-100) and brief feedback.
+        Format your response exactly as shown in the user's prompt."""
 
     def evaluate(self, prompt: str, code: str) -> FastAPIReviewCriteria:
-        """Evaluates FastAPI code using GPT."""
+        """
+        Evaluates FastAPI code using GPT.
+        """
         try:
             evaluation_prompt = f"""You are evaluating FastAPI code. For each criterion below, provide a score from 0 to 100 and a brief explanation.
 
-Code to evaluate:
-```python
-{code}
-```
+            Code to evaluate:
+            ```python
+            {code}
+            ```
 
-Format your response EXACTLY like this (including the exact headings):
+            Format your response EXACTLY like this (including the exact headings):
 
-ROUTING (Score: X/100):
-Brief feedback here
+            ROUTING (Score: X/100):
+            Brief feedback here
 
-TYPES (Score: X/100):
-Brief feedback here
+            TYPES (Score: X/100):
+            Brief feedback here
 
-ERRORS (Score: X/100):
-Brief feedback here
+            ERRORS (Score: X/100):
+            Brief feedback here
 
-VALIDATION (Score: X/100):
-Brief feedback here
+            VALIDATION (Score: X/100):
+            Brief feedback here
 
-RESPONSES (Score: X/100):
-Brief feedback here
+            RESPONSES (Score: X/100):
+            Brief feedback here
 
-DEPENDENCIES (Score: X/100):
-Brief feedback here
+            DEPENDENCIES (Score: X/100):
+            Brief feedback here
 
-DOCS (Score: X/100):
-Brief feedback here
+            DOCS (Score: X/100):
+            Brief feedback here
 
-PRACTICES (Score: X/100):
-Brief feedback here
+            PRACTICES (Score: X/100):
+            Brief feedback here
 
-SUGGESTIONS:
-1. First suggestion
-2. Second suggestion"""
+            SUGGESTIONS:
+            1. First suggestion
+            2. Second suggestion
+            """
 
             messages = [
                 {"role": "system", "content": self.system_prompt},
@@ -99,7 +101,7 @@ SUGGESTIONS:
             ]
 
             response = openai.chat.completions.create(
-                model="gpt-3.5-turbo",  # using GPT-3.5 for faster, cheaper evaluation
+                model="gpt-3.5-turbo",
                 messages=messages,
                 temperature=0.1,
                 max_tokens=1000
@@ -188,7 +190,9 @@ SUGGESTIONS:
             return result
 
 def format_gpt_evaluation(result: FastAPIReviewCriteria) -> str:
-    """Formats the GPT evaluation result into a readable string."""
+    """
+    Formats the GPT evaluation result into a readable string.
+    """
     output = []
     output.append("GPT FastAPI Code Review")
     output.append("=" * 40)
