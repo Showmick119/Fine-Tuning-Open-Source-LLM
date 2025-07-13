@@ -27,6 +27,7 @@ class DatasetPreparator:
     def enhance_code_snippet(self, code: str) -> str:
         """
         Enhance incomplete code snippets by adding proper imports and structure.
+        Only adds imports that are actually used in the code.
         
         Args:
             code: Raw code snippet that may be incomplete
@@ -48,31 +49,82 @@ class DatasetPreparator:
         # Start building the enhanced code
         enhanced_code = []
         
-        # Add necessary imports if missing
+        # Add necessary imports if missing - ONLY what's actually used
         if not has_fastapi_import:
-            imports = ["from fastapi import FastAPI, HTTPException, Depends, status"]
+            fastapi_imports = []
             
-            # Add router import if needed
-            if uses_router_decorator and not has_router_instance:
-                imports.append("from fastapi import APIRouter")
+            # Core FastAPI imports - only add if used
+            if "FastAPI" in code:
+                fastapi_imports.append("FastAPI")
+            if "HTTPException" in code:
+                fastapi_imports.append("HTTPException")
+            if "Depends(" in code:  # Only if actually used as function call
+                fastapi_imports.append("Depends")
+            if "status.HTTP_" in code or "status_code=status." in code:
+                fastapi_imports.append("status")
+            if "APIRouter" in code:
+                fastapi_imports.append("APIRouter")
+            if "Path(" in code:  # Only if used as function call
+                fastapi_imports.append("Path")
+            if "Query(" in code:
+                fastapi_imports.append("Query")
+            if "Form(" in code:
+                fastapi_imports.append("Form")
+            if "File(" in code:
+                fastapi_imports.append("File")
+            if "UploadFile" in code:
+                fastapi_imports.append("UploadFile")
+            if "BackgroundTasks" in code:
+                fastapi_imports.append("BackgroundTasks")
+            if "Request" in code and "def " in code:  # Only if used as parameter
+                fastapi_imports.append("Request")
             
-            # Add context-aware imports based on code content
+            # Add FastAPI import if we have any FastAPI components
+            if fastapi_imports:
+                enhanced_code.append(f"from fastapi import {', '.join(fastapi_imports)}")
+            
+            # Add other imports based on actual usage
             if "Session" in code and "sqlalchemy" not in code.lower():
-                imports.append("from sqlalchemy.orm import Session")
+                enhanced_code.append("from sqlalchemy.orm import Session")
             if "JSONResponse" in code:
-                imports.append("from fastapi.responses import JSONResponse")
+                enhanced_code.append("from fastapi.responses import JSONResponse")
             if "RedirectResponse" in code:
-                imports.append("from fastapi.responses import RedirectResponse")
-            if "List[" in code or "Dict[" in code:
-                imports.append("from typing import List, Dict, Any")
+                enhanced_code.append("from fastapi.responses import RedirectResponse")
+            if "HTMLResponse" in code:
+                enhanced_code.append("from fastapi.responses import HTMLResponse")
+            if "List[" in code or "Dict[" in code or "Optional[" in code:
+                typing_imports = []
+                if "List[" in code:
+                    typing_imports.append("List")
+                if "Dict[" in code:
+                    typing_imports.append("Dict")
+                if "Optional[" in code:
+                    typing_imports.append("Optional")
+                if "Any" in code:
+                    typing_imports.append("Any")
+                enhanced_code.append(f"from typing import {', '.join(typing_imports)}")
             if "BaseModel" in code:
-                imports.append("from pydantic import BaseModel")
-            if "Path(" in code and "from fastapi import" not in code:
-                # Fix incorrect Path usage - Path should be from fastapi not as a type
-                imports.append("from fastapi import Path")
+                enhanced_code.append("from pydantic import BaseModel")
+            if "Field(" in code:
+                enhanced_code.append("from pydantic import Field")
+            if "OAuth2PasswordBearer" in code:
+                enhanced_code.append("from fastapi.security import OAuth2PasswordBearer")
+            if "OAuth2PasswordRequestForm" in code:
+                enhanced_code.append("from fastapi.security import OAuth2PasswordRequestForm")
+            if "HTTPBasic" in code:
+                enhanced_code.append("from fastapi.security import HTTPBasic")
+            if "HTTPBearer" in code:
+                enhanced_code.append("from fastapi.security import HTTPBearer")
+            if "jwt" in code.lower():
+                enhanced_code.append("import jwt")
+            if "datetime" in code:
+                enhanced_code.append("from datetime import datetime")
+            if "logging" in code:
+                enhanced_code.append("import logging")
             
-            enhanced_code.extend(imports)
-            enhanced_code.append("")
+            # Add blank line after imports
+            if enhanced_code:
+                enhanced_code.append("")
         
         # Add app/router instance if missing
         if uses_app_decorator and not has_app_instance:
@@ -85,9 +137,11 @@ class DatasetPreparator:
         # Fix common issues in the code
         fixed_code = code
         
-        # Fix incorrect Path usage (Path should be a parameter annotation, not a type)
+        # Fix incorrect Path usage as type annotation (should be parameter types)
         if "user_id: Path" in fixed_code and "Path(" not in fixed_code:
             fixed_code = re.sub(r"user_id:\s*Path\b", "user_id: int", fixed_code)
+        if "item_id: Path" in fixed_code and "Path(" not in fixed_code:
+            fixed_code = re.sub(r"item_id:\s*Path\b", "item_id: int", fixed_code)
         
         # Fix missing app instance for orphaned decorators
         if uses_app_decorator and not has_app_instance and "app = FastAPI()" not in enhanced_code:
@@ -113,6 +167,7 @@ class DatasetPreparator:
     def create_augmented_examples(self, example: dict) -> list:
         """
         Create multiple variations of a single example to increase dataset size.
+        Only adds realistic variations that don't reinforce hardcoded patterns.
         
         Args:
             example: Original example dictionary
@@ -128,58 +183,65 @@ class DatasetPreparator:
         
         original_output = example['output']
         
-        # Variation 1: Add more detailed error handling
+        # Variation 1: Add more detailed error handling - only for database operations
         if 'HTTPException' in original_output and 'try:' not in original_output:
-            enhanced_output = original_output.replace(
-                'raise HTTPException(',
-                'try:\n        # Database operation\n        pass\n    except Exception as e:\n        raise HTTPException('
-            )
-            augmented.append({
-                **example,
-                'instruction': example['instruction'] + '\nInclude comprehensive error handling',
-                'output': enhanced_output,
-                'difficulty': 'intermediate' if example['difficulty'] == 'beginner' else example['difficulty']
-            })
-        
-        # Variation 2: Add response models for GET endpoints
-        if '@app.get(' in original_output or '@router.get(' in original_output:
-            if 'response_model=' not in original_output and 'List[' not in original_output:
+            # Only add error handling if it's a database/IO operation
+            if any(keyword in original_output.lower() for keyword in ['save()', 'delete()', 'first()', 'objects(', 'create(', 'update(']):
+                enhanced_output = original_output.replace(
+                    'raise HTTPException(',
+                    'try:\n        # Database operation\n        pass\n    except Exception as e:\n        raise HTTPException('
+                )
                 augmented.append({
                     **example,
-                    'instruction': example['instruction'] + '\nInclude proper response model typing',
-                    'input': example.get('input', '') + '\nAdd Pydantic response models',
-                    'output': original_output.replace('def ', 'def ').replace(
-                        '):', ') -> Dict[str, Any]:'),
-                    'category': 'models'
+                    'instruction': example['instruction'] + '\nInclude comprehensive error handling',
+                    'output': enhanced_output,
+                    'difficulty': 'intermediate' if example['difficulty'] == 'beginner' else example['difficulty']
                 })
         
-        # Variation 3: Add async version for non-database operations
-        if 'async def' not in original_output and 'Session' not in original_output:
-            async_output = original_output.replace('def ', 'async def ')
-            augmented.append({
-                **example,
-                'instruction': example['instruction'] + '\nImplement as async function',
-                'output': async_output,
-                'tags': example.get('tags', []) + ['async']
-            })
+        # Variation 2: Add response models for GET endpoints - only when appropriate
+        if '@app.get(' in original_output or '@router.get(' in original_output:
+            if 'response_model=' not in original_output and 'List[' not in original_output:
+                # Only add response models for data-returning endpoints
+                if 'return {' in original_output or 'return [' in original_output:
+                    augmented.append({
+                        **example,
+                        'instruction': example['instruction'] + '\nInclude proper response model typing',
+                        'input': example.get('input', '') + '\nAdd Pydantic response models',
+                        'output': original_output.replace(
+                            '):', ') -> Dict[str, Any]:'),
+                        'category': 'models'
+                    })
         
-        # Variation 4: Add dependency injection pattern
+        # Variation 3: Add async version for I/O operations only
+        if 'async def' not in original_output and 'Session' not in original_output:
+            # Only make async if it's doing I/O operations
+            if any(keyword in original_output.lower() for keyword in ['save()', 'delete()', 'first()', 'objects(', 'create(', 'update(', 'database', 'db']):
+                async_output = original_output.replace('def ', 'async def ')
+                augmented.append({
+                    **example,
+                    'instruction': example['instruction'] + '\nImplement as async function for database operations',
+                    'output': async_output,
+                    'tags': example.get('tags', []) + ['async']
+                })
+        
+        # Variation 4: Add dependency injection pattern - only for auth-related endpoints
         if 'Depends(' not in original_output and len(original_output.split('\n')) < 8:
-            # Add a simple dependency
-            dependency_output = original_output
-            if 'def ' in dependency_output:
-                func_line = [line for line in dependency_output.split('\n') if 'def ' in line][0]
-                enhanced_func = func_line.replace('def ', 'def ').replace(
-                    '):', ', current_user: str = Depends(get_current_user)):')
-                dependency_output = dependency_output.replace(func_line, enhanced_func)
-                
-            augmented.append({
-                **example,
-                'instruction': example['instruction'] + '\nAdd user authentication dependency',
-                'input': example.get('input', '') + '\nRequire authenticated user',
-                'output': dependency_output,
-                'category': 'auth'
-            })
+            # Only add dependencies for endpoints that should logically need authentication
+            if any(keyword in example.get('instruction', '').lower() for keyword in ['user', 'auth', 'login', 'protected', 'profile', 'account']):
+                dependency_output = original_output
+                if 'def ' in dependency_output:
+                    func_line = [line for line in dependency_output.split('\n') if 'def ' in line][0]
+                    enhanced_func = func_line.replace(
+                        '):', ', current_user: str = Depends(get_current_user)):')
+                    dependency_output = dependency_output.replace(func_line, enhanced_func)
+                    
+                augmented.append({
+                    **example,
+                    'instruction': example['instruction'] + '\nAdd user authentication dependency',
+                    'input': example.get('input', '') + '\nRequire authenticated user',
+                    'output': dependency_output,
+                    'category': 'auth'
+                })
         
         return augmented
 
