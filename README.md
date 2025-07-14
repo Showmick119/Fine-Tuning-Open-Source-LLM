@@ -1,5 +1,5 @@
-<div align="center">
 # FastAPI Code Generation with Fine-Tuned CodeLlama-7B
+<div align="center">
 
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Showmick119/Fine-Tuning-Open-Source-LLM/blob/main/notebooks/finetune_code_llama.ipynb)
 [![Model on HF](https://huggingface.co/datasets/huggingface/badges/resolve/main/model-on-hf-md.svg)](https://huggingface.co/Showmick119/codellama-7b-fastapi-finetuned-20250713)
@@ -104,7 +104,7 @@ print(response[len(prompt):].strip())
 
 4. **Run Training**: Execute the Jupyter notebook cells sequentially.
 
-## **Process**
+## **Methodology**
 
 ### **1. Intelligent Dataset Curation**
 - **GitHub Mining**: Automated extraction of real-world FastAPI patterns
@@ -163,7 +163,6 @@ print(response[len(prompt):].strip())
 | Error Handling | ❌ Basic/incomplete | ✅ Comprehensive |
 | Status Codes | ❌ Rarely used | ✅ Proper HTTP codes |
 | Database Patterns | ❌ Generic | ✅ FastAPI-specific |
-| Production Ready | ❌ Requires editing | ✅ Near production-ready |
 
 ## **Evaluation Results**
 
