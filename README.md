@@ -5,9 +5,9 @@
 [![Model on HF](https://huggingface.co/datasets/huggingface/badges/resolve/main/model-on-hf-md.svg)](https://huggingface.co/Showmick119/codellama-7b-fastapi-finetuned-20250713)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-</div>
-
 A production-ready fine-tuning pipeline for **CodeLlama-7b-Instruct-hf** specialized in **FastAPI code generation**. This project demonstrates techniques including **QLoRA quantization**, **github mining**,**dataset curation**, and **adaptive evaluation systems** to create a model that generates production-ready FastAPI applications.
+
+</div>
 
 ## **Results & Performance**
 
