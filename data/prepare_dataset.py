@@ -36,36 +36,30 @@ class DatasetPreparator:
             Complete FastAPI code with proper imports and structure
         """
         code = code.strip()
-        
-        # Check what's already present
+
         has_fastapi_import = bool(re.search(r"from\s+fastapi\s+import|import\s+fastapi", code, re.IGNORECASE))
         has_app_instance = bool(re.search(r"app\s*=\s*FastAPI\s*\(", code, re.IGNORECASE))
         has_router_instance = bool(re.search(r"router\s*=\s*APIRouter\s*\(", code, re.IGNORECASE))
-        
-        # Check if code uses app or router decorators
+
         uses_app_decorator = bool(re.search(r"@\s*app\.", code, re.IGNORECASE))
         uses_router_decorator = bool(re.search(r"@\s*router\.", code, re.IGNORECASE))
-        
-        # Start building the enhanced code
+
         enhanced_code = []
-        
-        # Add necessary imports if missing - ONLY what's actually used
+
         if not has_fastapi_import:
             fastapi_imports = []
-            
-            # FastAPI is ALWAYS needed for any FastAPI application
+
             fastapi_imports.append("FastAPI")
-            
-            # Other imports - only add if used
+
             if "HTTPException" in code:
                 fastapi_imports.append("HTTPException")
-            if "Depends(" in code:  # Only if actually used as function call
+            if "Depends(" in code:
                 fastapi_imports.append("Depends")
             if "status.HTTP_" in code or "status_code=status." in code:
                 fastapi_imports.append("status")
             if "APIRouter" in code:
                 fastapi_imports.append("APIRouter")
-            if "Path(" in code:  # Only if used as function call
+            if "Path(" in code:
                 fastapi_imports.append("Path")
             if "Query(" in code:
                 fastapi_imports.append("Query")
@@ -77,14 +71,12 @@ class DatasetPreparator:
                 fastapi_imports.append("UploadFile")
             if "BackgroundTasks" in code:
                 fastapi_imports.append("BackgroundTasks")
-            if "Request" in code and "def " in code:  # Only if used as parameter
+            if "Request" in code and "def " in code:
                 fastapi_imports.append("Request")
             
-            # Add FastAPI import if we have any FastAPI components
             if fastapi_imports:
                 enhanced_code.append(f"from fastapi import {', '.join(fastapi_imports)}")
-            
-            # Add other imports based on actual usage
+
             if "Session" in code and "sqlalchemy" not in code.lower():
                 enhanced_code.append("from sqlalchemy.orm import Session")
             if "JSONResponse" in code:
@@ -122,31 +114,25 @@ class DatasetPreparator:
                 enhanced_code.append("from datetime import datetime")
             if "logging" in code:
                 enhanced_code.append("import logging")
-            
-            # Add blank line after imports
+
             if enhanced_code:
                 enhanced_code.append("")
-        
-        # Add app/router instance if missing
+
         if uses_app_decorator and not has_app_instance:
             enhanced_code.append("app = FastAPI()")
             enhanced_code.append("")
         elif uses_router_decorator and not has_router_instance:
             enhanced_code.append("router = APIRouter()")
             enhanced_code.append("")
-        
-        # Fix common issues in the code
+
         fixed_code = code
-        
-        # Fix incorrect Path usage as type annotation (should be parameter types)
+
         if "user_id: Path" in fixed_code and "Path(" not in fixed_code:
             fixed_code = re.sub(r"user_id:\s*Path\b", "user_id: int", fixed_code)
         if "item_id: Path" in fixed_code and "Path(" not in fixed_code:
             fixed_code = re.sub(r"item_id:\s*Path\b", "item_id: int", fixed_code)
-        
-        # Fix missing app instance for orphaned decorators
+
         if uses_app_decorator and not has_app_instance and "app = FastAPI()" not in enhanced_code:
-            # Insert app creation before the first decorator
             lines = fixed_code.split('\n')
             for i, line in enumerate(lines):
                 if '@app.' in line:
@@ -154,13 +140,11 @@ class DatasetPreparator:
                     lines.insert(i+1, '')
                     break
             fixed_code = '\n'.join(lines)
-        
-        # Add the processed code
+
         enhanced_code.append(fixed_code)
         
         result = "\n".join(enhanced_code)
-        
-        # Clean up any double empty lines
+
         result = re.sub(r'\n\n\n+', '\n\n', result)
         
         return result
@@ -176,17 +160,14 @@ class DatasetPreparator:
         Returns:
             List of augmented examples
         """
-        augmented = [example]  # Include original
-        
-        # Skip augmentation for extremely complex examples (raised threshold)
+        augmented = [example]
+
         if example.get('complexity_score', 0) > 35:
             return augmented
         
         original_output = example['output']
-        
-        # Variation 1: Add more detailed error handling - more flexible conditions
+
         if 'HTTPException' in original_output and 'try:' not in original_output:
-            # Add error handling if it's a database/IO operation OR if it's intermediate/advanced
             database_operation = any(keyword in original_output.lower() for keyword in ['save()', 'delete()', 'first()', 'objects(', 'create(', 'update(', 'db.', 'session'])
             is_complex = example.get('difficulty', 'beginner') in ['intermediate', 'advanced']
             
@@ -201,11 +182,9 @@ class DatasetPreparator:
                     'output': enhanced_output,
                     'difficulty': 'intermediate' if example['difficulty'] == 'beginner' else example['difficulty']
                 })
-        
-        # Variation 2: Add response models - more flexible conditions  
+ 
         if '@app.get(' in original_output or '@router.get(' in original_output:
             if 'response_model=' not in original_output and 'List[' not in original_output:
-                # Add response models for data-returning endpoints OR simple dict returns
                 returns_data = 'return {' in original_output or 'return [' in original_output or 'return ' in original_output
                 if returns_data:
                     augmented.append({
@@ -216,10 +195,8 @@ class DatasetPreparator:
                             '):', ') -> Dict[str, Any]:'),
                         'category': 'models'
                     })
-        
-        # Variation 3: Add async version - more flexible conditions
+
         if 'async def' not in original_output and 'Session' not in original_output:
-            # Make async if it's doing I/O operations OR if it's database category OR intermediate+
             has_io = any(keyword in original_output.lower() for keyword in ['save()', 'delete()', 'first()', 'objects(', 'create(', 'update(', 'database', 'db.', 'session'])
             is_database_category = example.get('category', '') == 'database'
             is_intermediate_plus = example.get('difficulty', 'beginner') in ['intermediate', 'advanced']
@@ -232,10 +209,8 @@ class DatasetPreparator:
                     'output': async_output,
                     'tags': example.get('tags', []) + ['async']
                 })
-        
-        # Variation 4: Add dependency injection - more flexible conditions
+
         if 'Depends(' not in original_output and len(original_output.split('\n')) < 15:
-            # Add dependencies for auth-related endpoints OR protected endpoints OR intermediate+
             needs_auth = any(keyword in example.get('instruction', '').lower() for keyword in ['user', 'auth', 'login', 'protected', 'profile', 'account', 'secure'])
             is_auth_category = example.get('category', '') == 'authentication'
             is_intermediate_plus = example.get('difficulty', 'beginner') in ['intermediate', 'advanced']
@@ -255,17 +230,14 @@ class DatasetPreparator:
                     'output': dependency_output,
                     'category': 'auth'
                 })
-        
-        # Variation 5: Add status code usage - new variation
+
         if 'status_code=' not in original_output and 'status.HTTP_' not in original_output:
             if '@app.post(' in original_output or '@router.post(' in original_output:
-                # Add status codes for POST endpoints
                 status_output = original_output.replace(
                     '@app.post(', '@app.post('
                 ).replace(
                     '@router.post(', '@router.post('
                 )
-                # Add status_code parameter to decorator
                 if 'status_code=' not in status_output:
                     status_output = status_output.replace(
                         ')', ', status_code=status.HTTP_201_CREATED)')
@@ -294,7 +266,6 @@ class DatasetPreparator:
         total_augmented = 0
         
         for item in raw_data:
-            # Create augmented examples
             augmented_examples = self.create_augmented_examples(item)
             total_augmented += len(augmented_examples)
             
@@ -305,7 +276,6 @@ class DatasetPreparator:
                 if input_text:
                     instruction += f"\n\nInput:\n{input_text}"
 
-                # Enhance the output code to be complete and runnable
                 enhanced_output = self.enhance_code_snippet(aug_example['output'])
 
                 processed_data.append({
@@ -366,7 +336,6 @@ class DatasetPreparator:
 
             full_text = prompt + output
 
-            # Tokenize with FIXED padding to ensure exact same length every time
             tokenized = self.tokenizer(
                 full_text,
                 truncation=True,
@@ -378,7 +347,6 @@ class DatasetPreparator:
             input_ids = tokenized["input_ids"].squeeze()
             attention_mask = tokenized["attention_mask"].squeeze()
 
-            # Find where the prompt ends and the output begins
             prompt_tokenized = self.tokenizer(
                 prompt,
                 truncation=True,
@@ -388,7 +356,6 @@ class DatasetPreparator:
             )
             prompt_length = prompt_tokenized["input_ids"].shape[1]
 
-            # Create labels - mask the prompt tokens with -100
             labels = input_ids.clone()
             labels[:prompt_length] = -100
 
