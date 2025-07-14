@@ -135,7 +135,7 @@ print(response[len(prompt):].strip())
 - **Base Model**: `codellama/CodeLlama-7b-Instruct-hf`
 - **Quantization**: 4-bit with bitsandbytes
 - **LoRA Settings**: `r=64`, `alpha=32`, `lora_dropout=0.1`
-- **Training**: 3 epochs, 1e-4 learning rate, cosine scheduler
+- **Training**: `3 epochs`, `2 batch size`, `1e-4 learning rate`, `cosine scheduler`
 - **Hardware**: Single T4 GPU (15GB VRAM)
 
 ## **Use Cases**
@@ -170,10 +170,10 @@ print(response[len(prompt):].strip())
 1. **Authentication Endpoint**: +70.0 Pts on Custom FastAPI Evaluator, +78.0 Pts on LLM Judge
 2. **CRUD Operations**: +20.0 Pts on Custom FastAPI Evaluator, +21.0 Pts on LLM Judge  
 3. **Dependency Injection**: +10.0 Pts on Custom FastAPI Evaluator, +43.5 Pts on LLM Judge 
-4. **User Management**: +15.0 Pts on Custom FastAPI Evaluator, +13.5 Pts on LLM Judge 
+4. **User Management**: `+15.0 Pts` on Custom FastAPI Evaluator, +13.5 Pts on LLM Judge 
 
 ### **Key Improvements Demonstrated**
-- **No more repetitive imports** (eliminated base model hallucinations)
+- **No more repetition** (eliminated base model hallucinations)
 - **Context-aware imports** (only includes what's actually used)
 - **Professional error handling** (proper HTTP status codes)
 - **Database integration** (SQLAlchemy, MongoDB patterns)
