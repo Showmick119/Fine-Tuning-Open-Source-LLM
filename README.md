@@ -106,16 +106,16 @@ print(response[len(prompt):].strip())
 
 ## **Methodology**
 
-### **1. Intelligent Dataset Curation**
+### **1. Dataset Curation**
 - **GitHub Mining**: Automated extraction of real-world FastAPI patterns
 - **Smart Augmentation**: Context-aware code variations (1.72x dataset expansion)
 
-### **2. Advanced Training Configuration**
+### **2. Training Configuration**
 - **QLoRA Optimization**: 4-bit quantization with LoRA adapters
 - **Efficient Training**: ~55 minutes on T4 GPU with 570 examples
 - **Progress Monitoring**: Evaluation every 10 steps with detailed metrics
 
-### **3. Comprehensive Evaluation System**
+### **3. Evaluation System**
 - **FastAPI Evaluator**: Syntax, imports, endpoints, error handling, authentication, validation
 - **GPT Judge**: Code quality, best practices, completeness assessment
 - **Adaptive Scoring**: Complexity-aware evaluation criteria
