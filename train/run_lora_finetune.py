@@ -122,7 +122,6 @@ def run_training(
     
     training_args = TrainingArguments(**training_config_dict)
 
-    # Split dataset for evaluation if eval_strategy is not "no"
     train_dataset = dataset
     eval_dataset = None
     
@@ -136,7 +135,6 @@ def run_training(
     else:
         logger.info(f"Training examples: {len(train_dataset)}")
 
-    # Add callbacks
     callbacks = []
     if eval_dataset is not None and training_args.load_best_model_at_end:
         callbacks.append(EarlyStoppingCallback(early_stopping_patience=3))
