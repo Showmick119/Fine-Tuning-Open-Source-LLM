@@ -1,193 +1,233 @@
-# 🚀 CodeLlama Fine-tuning with QLoRA
+# FastAPI Code Generation with Fine-Tuned CodeLlama-7B
+<div align="center">
 
-This repository provides a clean, modular implementation for fine-tuning **CodeLlama-7b-Instruct** using **QLoRA (4-bit quantization)** via the PEFT library on the **CodeAlpaca-20k** dataset. The project is optimized for Google Colab environments and includes comprehensive evaluation on HumanEval.
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Showmick119/Fine-Tuning-Open-Source-LLM/blob/main/notebooks/finetune_code_llama.ipynb)
+[![Model on HF](https://huggingface.co/datasets/huggingface/badges/resolve/main/model-on-hf-md.svg)](https://huggingface.co/Showmick119/codellama-7b-fastapi-finetuned-20250713)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-## Features
+A production-ready fine-tuning pipeline for **CodeLlama-7b-Instruct-hf** specialized in **FastAPI code generation**. This project demonstrates techniques including **QLoRA quantization**, **github mining**,**dataset curation**, and **adaptive evaluation systems** to create a model that generates production-ready FastAPI applications.
 
-- 🤖 Fine-tune **CodeLlama-7b-Instruct** using QLoRA (4-bit quantization)
-- 📊 Train on **CodeAlpaca-20k** dataset (20,000 high-quality code examples)
-- ⚡ **QLoRA** support for efficient training on single GPU
-- 📈 **HumanEval** evaluation for benchmarking code generation
-- 🔄 Easy-to-use training and inference pipelines
-- 📓 Colab-ready Jupyter notebooks with rich documentation
-- 🎯 Clean, typed, and modular Python code
+</div>
 
-## Project Structure
+## **Results & Performance**
+
+| Metric | Base Model | Fine-tuned Model | Improvement |
+|--------|------------|------------------|-------------|
+| **FastAPI Code Quality** | 75.1/100 | **85.0/100** | **+9.9 points** |
+| **Code Completeness** | 59.9/100 | **75.8/100** | **+15.9 points** |
+
+### **Key Improvements**
+- **Proper FastAPI imports and structure** - Contextual import generation
+- **Database integration patterns** - SQLAlchemy, MongoDB support  
+- **Error handling with HTTP status codes** - Professional error responses
+- **Authentication and validation logic** - JWT, OAuth2, Pydantic models
+- **Production-ready code patterns** - Router organization
+
+## **Project Architecture**
 
 ```
-llm-finetuning-lora/
+Fine-Tuning-Open-Source-LLM/
 ├── configs/
-│   ├── lora_config.json        # QLoRA configuration for CodeLlama
-│   └── training_args.json      # Training hyperparameters
+│   ├── lora_config.json          # QLoRA adapter configuration
+│   ├── training_args.json        # Optimized training hyperparameters
+│   └── hub_config.json          # HuggingFace Hub deployment settings
 ├── data/
-│   ├── code_alpaca_20k.json    # CodeAlpaca-20k training dataset
-│   └── prepare_dataset.py      # Dataset preparation utilities
+│   ├── fastapi_miner.py          # GitHub FastAPI pattern mining
+│   ├── prepare_dataset.py        # Intelligent dataset preprocessing
+│   └── data/
+│       └── fastapi_mined_dataset.json  # 331 real-world FastAPI patterns
 ├── model/
-│   └── load_base_model.py      # Model loading with QLoRA support
+│   └── load_base_model.py        # Model loading with 4-bit quantization
 ├── train/
-│   └── run_lora_finetune.py    # Training pipeline
-├── inference/
-│   └── generate_text.py        # Code generation utilities
+│   └── run_lora_finetune.py      # Complete training pipeline
 ├── evaluate/
-│   └── evaluate_model.py       # HumanEval evaluation module
+│   ├── fastapi_evaluator.py      # FastAPI-specific code evaluation
+│   └── llm_judge.py             # GPT-based code quality assessment (LLM as a Judge Method)
 ├── notebooks/
-│   ├── 1_train_model.ipynb     # 🚀 Fine-tuning demonstration
-│   ├── 2_test_model.ipynb      # 🧪 Interactive testing
-│   └── 3_evaluate_model.ipynb  # 📊 HumanEval evaluation
-├── outputs/
-│   ├── checkpoints/            # Saved LoRA adapters
-│   ├── logs/                   # Training logs
-│   └── evaluation/             # Evaluation results
-├── requirements.txt            # Project dependencies
-└── README.md                  # This file
+│   └── finetune_code_llama.ipynb     # Complete fine-tuning workflow
+└── requirements.txt           # Production dependencies
 ```
 
-## Installation
+## **Quick Start**
 
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/your-username/llm-finetuning-lora.git
-   cd llm-finetuning-lora
-   ```
+### **Option 1: Use Pre-trained Model (Recommended)**
 
-2. Install dependencies:
+```python
+from transformers import AutoTokenizer, AutoModelForCausalLM
+import torch
+
+# Load the fine-tuned model
+model_name = "Showmick119/codellama-7b-fastapi-finetuned-20250713"
+tokenizer = AutoTokenizer.from_pretrained(model_name)
+model = AutoModelForCausalLM.from_pretrained(
+    model_name,
+    torch_dtype=torch.float16,
+    device_map="auto",
+    load_in_4bit=True
+)
+
+# Generate FastAPI code
+prompt = "[INST] Create a FastAPI POST endpoint for user registration with email validation [/INST]"
+inputs = tokenizer(prompt, return_tensors="pt")
+
+with torch.no_grad():
+    outputs = model.generate(
+        **inputs,
+        max_new_tokens=512,
+        temperature=0.1,
+        do_sample=True,
+        pad_token_id=tokenizer.pad_token_id
+    )
+
+response = tokenizer.decode(outputs[0], skip_special_tokens=True)
+print(response[len(prompt):].strip())
+```
+
+### **Option 2: Fine-tune Your Own Model**
+
+1. **Open in Google Colab** (Recommended):
+   [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Showmick119/Fine-Tuning-Open-Source-LLM/blob/main/notebooks/finetune_code_llama.ipynb)
+
+2. **Local Setup**:
    ```bash
+   git clone https://github.com/Showmick119/Fine-Tuning-Open-Source-LLM.git
+   cd Fine-Tuning-Open-Source-LLM
    pip install -r requirements.txt
    ```
 
-## Usage
+3. **Configure HuggingFace Access**:
+   ```python
+   import os
+   os.environ['HF_TOKEN'] = 'your_hf_token_here'
+   os.environ['OPENAI_API_KEY'] = 'your_openai_key_here'  # For LLM as a Judge Evaluation
+   ```
 
-### 1. Dataset: CodeAlpaca-20k
+4. **Run Training**: Execute the Jupyter notebook cells sequentially.
 
-The repository comes with the **CodeAlpaca-20k** dataset (`data/code_alpaca_20k.json`) containing 20,000 high-quality instruction-following examples for code generation. The dataset format:
+## **Methodology**
 
-```json
-{
-    "instruction": "Write a Python function to...",
-    "input": "Optional input context",
-    "output": "def example_function():\n    # Implementation"
-}
+### **1. Dataset Curation**
+- **GitHub Mining**: Automated extraction of real-world FastAPI patterns
+- **Smart Augmentation**: Context-aware code variations (1.72x dataset expansion)
+
+### **2. Training Configuration**
+- **QLoRA Optimization**: 4-bit quantization with LoRA adapters
+- **Efficient Training**: ~55 minutes on T4 GPU with 570 examples
+- **Progress Monitoring**: Evaluation every 10 steps with detailed metrics
+
+### **3. Evaluation System**
+- **FastAPI Evaluator**: Syntax, imports, endpoints, error handling, authentication, validation
+- **GPT Judge**: Code quality, best practices, completeness assessment
+- **Adaptive Scoring**: Complexity-aware evaluation criteria
+
+## **Dataset & Training Details**
+
+### **Dataset Composition**
+| Category | Examples | Description |
+|----------|----------|-------------|
+| **Authentication** | 215 | JWT, OAuth2, session management |
+| **Database** | 94 | SQLAlchemy, MongoDB integration |
+| **Endpoints** | 74 | REST API patterns, CRUD operations |
+| **Models** | 29 | Pydantic schemas, validation |
+| **Validation** | 4 | Input validation, error handling |
+
+### **Training Configuration**
+- **Base Model**: `codellama/CodeLlama-7b-Instruct-hf`
+- **Quantization**: 4-bit with bitsandbytes
+- **LoRA Settings**: `r=64`, `alpha=32`, `lora_dropout=0.1`
+- **Training**: `3 epochs`, `2 batch size`, `1e-4 learning rate`, `cosine scheduler`
+- **Hardware**: Single T4 GPU (15GB VRAM)
+
+## **Use Cases**
+
+### **Enterprise Development**
+- **API Scaffolding**: Generate complete FastAPI applications
+- **Code Review**: Ensure best practices and error handling
+- **Documentation**: Auto-generate OpenAPI specifications
+
+### **Education & Learning**
+- **FastAPI Tutorials**: Generate teaching examples
+- **Code Completion**: IDE integration for FastAPI development
+- **Best Practices**: Learn proper FastAPI patterns
+
+### **Rapid Prototyping**
+- **MVP Development**: Quick API prototypes
+- **Microservices**: Generate service templates
+- **Integration Testing**: Create test endpoints
+
+## **Model Comparison**
+
+| Feature | Base CodeLlama-7B | Fine-tuned Model |
+|---------|-------------------|------------------|
+| FastAPI Imports | ❌ Often missing | ✅ Always correct |
+| Error Handling | ❌ Basic/incomplete | ✅ Comprehensive |
+| Status Codes | ❌ Rarely used | ✅ Proper HTTP codes |
+| Database Patterns | ❌ Generic | ✅ FastAPI-specific |
+
+## **Evaluation Results**
+
+### **Test Case Performance Against Base Model**
+1. **Authentication Endpoint**: `+70.0 Pts` on Custom FastAPI Evaluator, `+78.0 Pts` on LLM Judge
+2. **CRUD Operations**: `+20.0 Pts` on Custom FastAPI Evaluator, `+21.0 Pts` on LLM Judge  
+3. **Dependency Injection**: `+10.0 Pts` on Custom FastAPI Evaluator, `+43.5 Pts` on LLM Judge 
+4. **User Management**: `+15.0 Pts` on Custom FastAPI Evaluator, `+13.5 Pts` on LLM Judge 
+
+### **Key Improvements Demonstrated**
+- **No more repetition** (eliminated base model hallucinations)
+- **Context-aware imports** (only includes what's actually used)
+- **Professional error handling** (proper HTTP status codes)
+- **Database integration** (SQLAlchemy, MongoDB patterns)
+
+## **Requirements**
+### **Core Dependencies**
+```
+torch>=2.0.0
+transformers>=4.36.0
+datasets>=2.15.0
+peft>=0.7.0
+bitsandbytes>=0.41.0
+accelerate>=0.25.0
+tqdm>=4.66.0
+numpy>=1.24.0
+requests>=2.31.0
+openai>=1.0.0     # For LLM as a Judge Evaluation 
+huggingface_hub>=0.19.0
+trl>=0.7.0
+jupyter>=1.0.0
+evaluate>=0.4.0
 ```
 
-### 2. QLoRA Configuration
+### **Hardware Requirements**
+- **Minimum**: T4 GPU (15GB VRAM) for training
+- **Recommended**: A100 or V100 for faster training
+- **Inference**: CPU compatible with 4-bit quantization
 
-The model is pre-configured for **CodeLlama-7b-Instruct** with QLoRA settings in `configs/lora_config.json`:
+## **Contributing**
 
-```json
-{
-    "base_model_name": "codellama/CodeLlama-7b-Instruct-hf",
-    "load_in_4bit": true,
-    "bnb_config": {
-        "bnb_4bit_quant_type": "nf4",
-        "bnb_4bit_compute_dtype": "bfloat16"
-    },
-    "lora_config": {
-        "r": 16,
-        "lora_alpha": 32,
-        "target_modules": ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
-    }
-}
-```
+1. **Fork** the repository
+2. **Create** a feature branch (`git checkout -b feature/amazing-feature`)
+3. **Commit** your changes (`git commit -m 'Add amazing feature'`)
+4. **Push** to the branch (`git push origin feature/amazing-feature`)
+5. **Open** a Pull Request
 
-### 3. Quick Start with Google Colab
+## **Acknowledgments**
 
-#### 🚀 Fine-tuning (Notebook)
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/your-username/llm-finetuning-lora/blob/main/notebooks/1_train_model.ipynb)
+- **Meta AI** for the base CodeLlama-7b-Instruct model
+- **HuggingFace** for the transformers library and model hosting
+- **Microsoft** for QLoRA implementation and training optimizations
+- **FastAPI community** for the excellent framework and patterns
 
-1. Open `notebooks/1_train_model.ipynb` in Google Colab
-2. Run all cells to fine-tune CodeLlama on CodeAlpaca-20k
-3. Training takes ~1-2 hours on Colab's T4 GPU
+## **Contact & Support**
 
-#### 🧪 Testing (Notebook)
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/your-username/llm-finetuning-lora/blob/main/notebooks/2_test_model.ipynb)
+- **GitHub Issues**: [Report bugs or request features](https://github.com/Showmick119/Fine-Tuning-Open-Source-LLM/issues)
+- **Model Downloads**: [HuggingFace Hub](https://huggingface.co/Showmick119/codellama-7b-fastapi-finetuned-20250713)
 
-1. Open `notebooks/2_test_model.ipynb` 
-2. Test your fine-tuned model on various coding tasks
-3. Interactive prompt interface for custom testing
+---
 
-#### 📊 Evaluation (Notebook)
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/your-username/llm-finetuning-lora/blob/main/notebooks/3_evaluate_model.ipynb)
+<div align="center">
 
-1. Open `notebooks/3_evaluate_model.ipynb`
-2. Benchmark your model on HumanEval (164 coding problems)
-3. Get Pass@1 scores and detailed analysis
+**⭐ Star this repository if you find it helpful!**
 
-### 4. Command Line Usage
+*Built with ❤️ for the FastAPI and AI community*
 
-#### Fine-tuning
-```bash
-python train/run_lora_finetune.py \
-    --training_config configs/training_args.json \
-    --lora_config configs/lora_config.json
-```
-
-#### Code Generation
-```bash
-python inference/generate_text.py \
-    --base_model codellama/CodeLlama-7b-Instruct-hf \
-    --adapter_path outputs/checkpoints \
-    --instruction "Write a Python function to implement binary search"
-```
-
-#### HumanEval Evaluation
-```bash
-python evaluate/evaluate_model.py \
-    --base_model codellama/CodeLlama-7b-Instruct-hf \
-    --adapter_path outputs/checkpoints
-```
-
-## Advanced Usage
-
-### Custom Dataset Preparation
-
-Extend the `DatasetPreparator` class in `data/prepare_dataset.py` to handle your specific data format:
-
-```python
-from data.prepare_dataset import DatasetPreparator
-
-preparator = DatasetPreparator(
-    tokenizer="mistralai/Mistral-7B-v0.1",
-    max_length=512,
-    data_path="path/to/your/data.json"
-)
-dataset = preparator.prepare_dataset()
-```
-
-### Customizing the Training Loop
-
-Modify `train/run_lora_finetune.py` to add custom training features:
-
-```python
-from train.run_lora_finetune import run_training
-
-run_training(
-    training_config_path="configs/training_args.json",
-    lora_config_path="configs/lora_config.json",
-    data_path="path/to/your/data.json",
-    output_dir="custom/output/path"
-)
-```
-
-## Requirements
-
-- Python 3.10+
-- PyTorch 2.0+
-- Transformers 4.36+
-- PEFT 0.7+
-- Datasets 2.15+
-- Accelerate 0.25+
-- bitsandbytes 0.41+
-- lighteval 0.4+ (for HumanEval evaluation)
-
-### Hardware Requirements
-- **Training**: 12GB+ GPU (Colab T4 works well)
-- **Inference**: 6GB+ GPU or CPU
-- **Evaluation**: 8GB+ GPU for HumanEval benchmark
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
+</div> 

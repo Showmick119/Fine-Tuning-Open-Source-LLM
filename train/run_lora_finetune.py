@@ -5,30 +5,28 @@ Script for running QLoRA fine-tuning on Code Llama 7B Instruct Model.
 import json
 import logging
 from pathlib import Path
-import argparse
 from datetime import datetime
+import argparse
 
-import torch
-from transformers import (
-    Trainer,
-    TrainingArguments,
-    DataCollatorForLanguageModeling,
-)
+from transformers import TrainingArguments, Trainer, EarlyStoppingCallback
+from transformers.data.data_collator import default_data_collator
 
 
 def setup_logging(log_dir: Path):
     """
-    Setup logging configuration.
-
+    Set up logging configuration.
+    
     Args:
-        log_dir: Path to logging file.
+        log_dir: Directory for log files.
     """
-    log_dir.mkdir(parents=True, exist_ok=True)
+    log_dir.mkdir(exist_ok=True)
+    log_file = log_dir / f"training_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+    
     logging.basicConfig(
         level=logging.INFO,
-        format='%(asctime)s - %(levelname)s - %(message)s',
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
         handlers=[
-            logging.FileHandler(log_dir / 'training.log'),
+            logging.FileHandler(log_file),
             logging.StreamHandler()
         ]
     )
@@ -39,10 +37,10 @@ def load_config(config_path: str) -> dict:
     Load configuration from JSON file.
     
     Args:
-        config_path: Path to the JSON config file.
+        config_path: Path to the configuration file.
         
     Returns:
-        dict: Configuration dictionary.
+        Dictionary with configuration parameters.
     """
     with open(config_path, 'r', encoding='utf-8') as f:
         return json.load(f)
@@ -50,35 +48,32 @@ def load_config(config_path: str) -> dict:
 
 def save_training_outputs(output_dir: Path, model, tokenizer, training_args, final_metrics=None):
     """
-    Save all training outputs in an organized structure.
+    Save training outputs including model, tokenizer, and metrics.
     
     Args:
-        output_dir: Base output directory.
+        output_dir: Directory to save outputs.
         model: Trained model.
         tokenizer: Tokenizer.
         training_args: Training arguments used.
-        final_metrics: Optional dictionary of final training metrics.
+        final_metrics: Final training metrics.
     """
-    model_dir = output_dir / 'model'
-    model_dir.mkdir(parents=True, exist_ok=True)
-    model.save_pretrained(model_dir)
-    tokenizer.save_pretrained(model_dir)
-
-    with open(output_dir / 'training_args.json', 'w') as f:
+    output_dir = Path(output_dir)
+    output_dir.mkdir(exist_ok=True)
+    
+    logger = logging.getLogger(__name__)
+    logger.info(f"Saving training outputs to {output_dir}")
+    
+    model.save_pretrained(output_dir)
+    tokenizer.save_pretrained(output_dir)
+    
+    config_file = output_dir / "training_config.json"
+    with open(config_file, 'w', encoding='utf-8') as f:
         json.dump(training_args.to_dict(), f, indent=2)
-
+    
     if final_metrics:
-        with open(output_dir / 'metrics.json', 'w') as f:
+        metrics_file = output_dir / "final_metrics.json"
+        with open(metrics_file, 'w', encoding='utf-8') as f:
             json.dump(final_metrics, f, indent=2)
-
-    if torch.cuda.is_available():
-        gpu_info = {
-            "device_name": torch.cuda.get_device_name(0),
-            "memory_allocated_gb": torch.cuda.memory_allocated() / 1e9,
-            "memory_reserved_gb": torch.cuda.memory_reserved() / 1e9
-        }
-        with open(output_dir / 'gpu_info.json', 'w') as f:
-            json.dump(gpu_info, f, indent=2)
 
 
 def run_training(
@@ -90,13 +85,10 @@ def run_training(
     output_dir="./results"
 ):
     """
-    Run LoRA fine-tuning on the model using configuration files.
-    
-    Note: Model should already be quantized and have LoRA adapters applied
-    via the ModelLoader class before calling this function.
-    
+    Run LoRA fine-tuning with comprehensive logging and configuration.
+
     Args:
-        model: The model to fine-tune (already with LoRA adapters).
+        model: Model to train.
         tokenizer: The tokenizer.
         dataset: Training dataset.
         training_config_path: Path to training arguments JSON config.
@@ -130,11 +122,30 @@ def run_training(
     
     training_args = TrainingArguments(**training_config_dict)
 
+    train_dataset = dataset
+    eval_dataset = None
+    
+    if training_args.eval_strategy != "no":
+        logger.info("Splitting dataset for evaluation")
+        dataset_split = dataset.train_test_split(test_size=0.1, seed=42)
+        train_dataset = dataset_split["train"]
+        eval_dataset = dataset_split["test"]
+        logger.info(f"Training examples: {len(train_dataset)}")
+        logger.info(f"Evaluation examples: {len(eval_dataset)}")
+    else:
+        logger.info(f"Training examples: {len(train_dataset)}")
+
+    callbacks = []
+    if eval_dataset is not None and training_args.load_best_model_at_end:
+        callbacks.append(EarlyStoppingCallback(early_stopping_patience=3))
+
     trainer = Trainer(
         model=model,
         args=training_args,
-        train_dataset=dataset,
-        data_collator=DataCollatorForLanguageModeling(tokenizer, mlm=False)
+        train_dataset=train_dataset,
+        eval_dataset=eval_dataset,
+        data_collator=default_data_collator,
+        callbacks=callbacks
     )
 
     logger.info("Starting training")
