@@ -167,10 +167,10 @@ print(response[len(prompt):].strip())
 ## **Evaluation Results**
 
 ### **Test Case Performance Against Base Model**
-1. **Authentication Endpoint**: +70.0 Pts on Custom FastAPI Evaluator, +78.0 Pts on LLM Judge
-2. **CRUD Operations**: +20.0 Pts on Custom FastAPI Evaluator, +21.0 Pts on LLM Judge  
-3. **Dependency Injection**: +10.0 Pts on Custom FastAPI Evaluator, +43.5 Pts on LLM Judge 
-4. **User Management**: `+15.0 Pts` on Custom FastAPI Evaluator, +13.5 Pts on LLM Judge 
+1. **Authentication Endpoint**: `+70.0 Pts` on Custom FastAPI Evaluator, `+78.0 Pts` on LLM Judge
+2. **CRUD Operations**: `+20.0 Pts` on Custom FastAPI Evaluator, `+21.0 Pts` on LLM Judge  
+3. **Dependency Injection**: `+10.0 Pts` on Custom FastAPI Evaluator, `+43.5 Pts` on LLM Judge 
+4. **User Management**: `+15.0 Pts` on Custom FastAPI Evaluator, `+13.5 Pts` on LLM Judge 
 
 ### **Key Improvements Demonstrated**
 - **No more repetition** (eliminated base model hallucinations)
