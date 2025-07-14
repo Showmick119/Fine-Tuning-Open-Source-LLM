@@ -42,3 +42,5 @@ wandb/
 # OS
 .DS_Store
 Thumbs.db 
+
+MODEL_CARD.md
