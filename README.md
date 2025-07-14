@@ -269,6 +269,10 @@ This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) 
 
 ---
 
+<div align="center">
+
 **⭐ Star this repository if you find it helpful!**
 
 *Built with ❤️ for the FastAPI and AI community*
+
+</div> 
