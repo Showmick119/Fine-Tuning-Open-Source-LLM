@@ -13,7 +13,7 @@ A production-ready fine-tuning pipeline for **CodeLlama-7b-Instruct-hf** special
 
 | Metric | Base Model | Fine-tuned Model | Improvement |
 |--------|------------|------------------|-------------|
-| **FastAPI Code Quality** | 75.1/100 | **85.0/100** | **+9.9 points** |
+| **FastAPI Code Quality** | 75.1/100 | **86.6/100** | **+11.5 points** |
 | **Code Completeness** | 59.9/100 | **75.8/100** | **+15.9 points** |
 
 ### **Key Improvements**
